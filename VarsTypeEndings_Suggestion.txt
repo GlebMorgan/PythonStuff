@@ -1,0 +1,8 @@
+I   - Int
+F   - Float
+L   - List
+T   - Tuple
+D   - Dict
+S   - Set
+B   - Bool
+Str - String
