@@ -1,4 +1,4 @@
-def RFC1071(msgStr):
+def rfc1071str(msgStr):
     if(len(msgStr) % 4 != 0): msgStr += "00"
     octetPairs = list(map(''.join, zip(*[iter(msgStr)]*4)))
     chsum = sum([int(dOctet, 16) for dOctet in octetPairs])

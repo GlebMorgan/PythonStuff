@@ -4,5 +4,5 @@ L   - List
 T   - Tuple
 D   - Dict
 S   - Set
-B   - Bool
+B   - Bytes
 Str - String

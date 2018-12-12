@@ -36,7 +36,7 @@ class InternalNameShadingVerifier():
     def isReserved(self, name):
         return (name in self.reservedNamesSet)
 
-    def showModule(self, name): #TODO: rename properly
+    def showShadowedModule(self, name):
         return [moduleName
                 for key in self.internalNamesDict
                     for moduleName in self.internalNamesDict[key]
