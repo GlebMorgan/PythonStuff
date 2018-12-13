@@ -1,7 +1,7 @@
 # classes use their own imports
 
 class InternalNameShadingVerifier():
-    def __init__(self, docslibs=True, actuallibs=True, builtins=True, keywords=True):
+    def __init__(self, docslibs=True, reallibs=True, builtins=True, keywords=True):
         import os
         import sys
         import keyword
@@ -14,7 +14,7 @@ class InternalNameShadingVerifier():
         if (docslibs): self.internalNamesDict['docslibs'] = stdlib_list()
         if (keywords): self.internalNamesDict['keywords'] = keyword.kwlist
         if (builtins): self.internalNamesDict['builtins'] = sys.builtin_module_names
-        if (actuallibs):
+        if (reallibs):
             stdlib_items = []
             std_lib = distutils.sysconfig.get_python_lib(standard_lib=True)
             for top, dirs, files in os.walk(std_lib):
@@ -37,10 +37,11 @@ class InternalNameShadingVerifier():
         return (name in self.reservedNamesSet)
 
     def showShadowedModule(self, name):
+        name = f".{name}"
         return [moduleName
                 for key in self.internalNamesDict
                     for moduleName in self.internalNamesDict[key]
-                        if moduleName.endswith(f".{name}")
+                        if moduleName.endswith(name)
         ]
 
 
