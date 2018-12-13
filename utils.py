@@ -45,6 +45,14 @@ class InternalNameShadingVerifier():
 
 
 def isInt(num):
+    """
+    Check an object could be coarced to 'int'
+
+    :param num: any
+    :return: True / False
+    :rtype: bool
+    """
+
     try:
         int(num)
         return True
@@ -52,12 +60,35 @@ def isInt(num):
         return False
 
 
-if __name__ == '__main__':
-    CHECK_ITEM = "InternalNameShadingVerifier"
+def bytewise(bBytes):
+    """
+    Represents sequence of bytes as space-separated octets or '<Void>' if sequence is empty
 
-    if(CHECK_ITEM == InternalNameShadingVerifier):
+    :param bBytes: bytes sequence to display
+    :type bBytes: bytes
+    :return: bytewise space-separated string
+    :rtype str
+    """
+
+    return (" ".join(list(map(''.join, zip(*[iter(bBytes.hex())]*2)))) or '<Void>') if bBytes is not None else '<Void>'
+
+
+if __name__ == '__main__':
+    CHECK_ITEM = bytewise
+
+    if (CHECK_ITEM == InternalNameShadingVerifier):
         intNameVerifier = InternalNameShadingVerifier()
         print(intNameVerifier.reservedNamesSet)
         print(intNameVerifier.isReserved("utils"))
         print(intNameVerifier.showModule("utils"))
+
+    if (CHECK_ITEM == bytewise):
+        print(f"b'' - {bytewise(b'')}")
+        print(f"None - {bytewise(None)}")
+        print(f"Bytes - {bytewise(b'AAABBCC')}")
+        print(f"Short bytes - {bytewise(bytes.fromhex('0055FF01'))}")
+        print(f"Zero bytes - {bytewise(bytes.fromhex('0000000000'))}")
+        print(f"1 byte - {bytewise(bytes.fromhex('00'))}")
+        print(f"two bytes - {bytewise(b'fc')}")
+        # print(f"Looong bytes - {bytewise(bytes.fromhex('00'*10_000_000))}")
 
