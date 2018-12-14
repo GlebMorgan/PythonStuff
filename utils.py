@@ -1,19 +1,27 @@
-# classes use their own imports
+#TODO: classes use their own imports
 
+import importlib
+import os
+import sys
+import keyword
+import distutils.sysconfig
+import stdlib_list
 class InternalNameShadingVerifier():
-    def __init__(self, docslibs=True, reallibs=True, builtins=True, keywords=True):
-        import os
-        import sys
-        import keyword
-        import distutils.sysconfig
-        from stdlib_list import stdlib_list
 
-        self.reservedNamesSet = set()
+
+    def __init__(self, docslibs=True, reallibs=True, builtins=True, keywords=True, internals=False):
         self.internalNamesDict = {}
-
-        if (docslibs): self.internalNamesDict['docslibs'] = stdlib_list()
+        self.checkinternals = internals
+        if (docslibs): self.internalNamesDict['docslibs'] = stdlib_list.stdlib_list()
         if (keywords): self.internalNamesDict['keywords'] = keyword.kwlist
-        if (builtins): self.internalNamesDict['builtins'] = sys.builtin_module_names
+        if (builtins):
+            modules = []
+            try:
+                for modulename in sys.builtin_module_names:
+                    if (not modulename.startswith('_')): self._public_submodules_recursive(modules, '', modulename)
+            except RecursionError: modules.append(...)
+
+            self.internalNamesDict['builtins'] = modules
         if (reallibs):
             stdlib_items = []
             std_lib = distutils.sysconfig.get_python_lib(standard_lib=True)
@@ -28,22 +36,41 @@ class InternalNameShadingVerifier():
                         stdlib_items.append(nm[0:-3])
             self.internalNamesDict['actuallibs'] = stdlib_items
 
+
+    def _public_submodules_recursive(self, submodules, basemodule, currname):
+        if (currname in ('this', 'antigravity')): return
+        fullbasemodule = f"{basemodule}.{currname}" if basemodule else currname
+        try: currmodule = importlib.import_module(fullbasemodule)
+        except (ImportError, ModuleNotFoundError): return
+        for submodule in dir(currmodule):
+            if (not submodule.startswith('_') or self.checkinternals):
+                self._public_submodules_recursive(submodules, fullbasemodule, submodule)
+                submodules.append(f"{fullbasemodule}.{submodule}")
+
+    @property
+    def reservedNames(self):
+        reservedNamesSet = set()
         for key in self.internalNamesDict:
             for name in self.internalNamesDict[key]:
-                self.reservedNamesSet.add(name.split(".")[-1] if '.' in name else name)
-
+                reservedNamesSet.add(name.split(".")[-1] if '.' in name else name)
+        return reservedNamesSet
 
     def isReserved(self, name):
-        return (name in self.reservedNamesSet)
+        return (name in self.reservedNames)
 
-    def showShadowedModule(self, name):
+    def showShadowedModules(self, name):
         name = f".{name}"
-        return [moduleName
+        names = (moduleName
                 for key in self.internalNamesDict
                     for moduleName in self.internalNamesDict[key]
-                        if moduleName.endswith(name)
-        ]
+                        if (moduleName.endswith(name))
+        )
+        return set(names) or '<None>'
 
+    def showShadowedNames(self, name):
+        names = []
+        for currname in self.reservedNames: self._public_submodules_recursive(names, '', currname)
+        return tuple(currname for currname in names if currname.endswith(f".{name}")) or '<None>'
 
 def isInt(num):
     """
@@ -71,17 +98,21 @@ def bytewise(bBytes):
     :rtype str
     """
 
-    return (" ".join(list(map(''.join, zip(*[iter(bBytes.hex())]*2)))) or '<Void>') if bBytes is not None else '<Void>'
+    return " ".join(list(map(''.join, zip(*[iter(bBytes.hex())]*2)))) or '<Void>' if bBytes is not None else '<Void>'
+
+
+
 
 
 if __name__ == '__main__':
-    CHECK_ITEM = bytewise
+    CHECK_ITEM = InternalNameShadingVerifier
 
     if (CHECK_ITEM == InternalNameShadingVerifier):
-        intNameVerifier = InternalNameShadingVerifier()
-        print(intNameVerifier.reservedNamesSet)
-        print(intNameVerifier.isReserved("utils"))
-        print(intNameVerifier.showModule("utils"))
+        shver = InternalNameShadingVerifier(internals=0)
+        # print(shver.reservedNames)
+        print(shver.isReserved("c"))
+        print(shver.showShadowedModules("c"))
+        print(shver.showShadowedNames('c'))
 
     if (CHECK_ITEM == bytewise):
         print(f"b'' - {bytewise(b'')}")
