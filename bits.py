@@ -48,8 +48,10 @@ def split(): NotImplemented
 
 def extract(value, frombit=None, tobit=0):
     """
-    Mask given number based on provided limits [frombit..tobit], both inclusive,
-    and return extracted number
+    Extract number from 'value' based on provided limits [frombit..tobit], both inclusive
+    Ex: extract(0b001_110_10, 2, 4) == 0b110
+        extract(0b01_0_1, 1, 1) == 0b0
+        extract(0b000_1, 0) == 0b1
 
     :param value: integer number to be masked
     :type value: int
@@ -91,19 +93,23 @@ if __name__ == '__main__':
     def extract_test():
         assert(extract(0b01100, 3, 2) == 0b11)
         assert(extract(0b01100, tobit=2) == 0b11)
-        assert(extract(0b01100, None, 2) == 0b11)
-        assert(extract(0b11100, None, 2) == 0b111)
+        assert(extract(0b01100, tobit=2) == 0b11)
+        assert(extract(0b11100, tobit=2) == 0b111)
         assert(extract(0b000, 0, 0) == 0b0)
         assert(extract(0b0011, 1, 0) == 0b11)
-        assert(extract(0b0011, None, 0) == 0b11)
-        assert(extract(0b0011, None, 1) == 0b1)
-        assert(extract(0b0011, None, 2) == 0b0)
+        assert(extract(0b0011, tobit=0) == 0b11)
+        assert(extract(0b0011, tobit=1) == 0b1)
+        assert(extract(0b0011, tobit=2) == 0b0)
         assert(extract(0b1100_0010, 7, 2) == 0b110000)
         assert(extract(0b1100_0010, 7, 0) == 0b11000010)
-        assert(extract(0b1100_0010, None, 0) == 0b11000010)
+        assert(extract(0b1100_0010, tobit=0) == 0b11000010)
         assert(extract(0b1100_0010, 6, 0) == 0b1000010)
         assert(extract(0b1100_0010, 6, 6) == 0b1)
         assert(extract(0b1100_0010, 7, 6) == 0b11)
+        assert(extract(0b1000110, tobit=4) == 0b100)
+        assert(extract(0b0011_1010, 4, 2) == 0b110)
+        assert(extract(0b0001, tobit=0) == 0b1)
+        assert(extract(0b0101, 1, 1) == 0b0)
 
     def combine_test():
         assert(bin(combine(0b0010_0000, 0b1110_0001, 0b0000_0010)) == 0b1110_0011)
