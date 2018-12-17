@@ -1,5 +1,5 @@
 from functools import reduce
-
+from math import log2
 def set(value, bits):
     """
     Set specified bits to 1 and return new binary number
@@ -46,6 +46,27 @@ def combine(*values):
 def split(): NotImplemented
 
 
+def extract(value, frombit=None, tobit=0):
+    """
+    Mask given number based on provided limits [frombit..tobit], both inclusive,
+    and return extracted number
+
+    :param value: integer number to be masked
+    :type value: int
+    :param frombit: first mask bit index (right to left bit order)
+    :type frombit: int
+    :param tobit: last mask bit index (right to left bit order)
+    :type tobit: int
+    :return: extracted integet
+    :rtype: int
+    """
+
+    if (value == 0): return 0
+    # set 'frombit' to leftmost meaningful bit if undefined
+    if (not frombit): frombit = int(log2(value))+1
+    return (value & ((1<<frombit+1) - 1)) >> tobit
+
+
 if __name__ == '__main__':
     def set_test():
         assert (set_bits(0b0011, (2, 3)) == 0b1111)
@@ -67,5 +88,25 @@ if __name__ == '__main__':
         assert(clear(0b0001, (2)) == 1)
         print("DONE")
 
+    def extract_test():
+        assert(extract(0b01100, 3, 2) == 0b11)
+        assert(extract(0b01100, tobit=2) == 0b11)
+        assert(extract(0b01100, None, 2) == 0b11)
+        assert(extract(0b11100, None, 2) == 0b111)
+        assert(extract(0b000, 0, 0) == 0b0)
+        assert(extract(0b0011, 1, 0) == 0b11)
+        assert(extract(0b0011, None, 0) == 0b11)
+        assert(extract(0b0011, None, 1) == 0b1)
+        assert(extract(0b0011, None, 2) == 0b0)
+        assert(extract(0b1100_0010, 7, 2) == 0b110000)
+        assert(extract(0b1100_0010, 7, 0) == 0b11000010)
+        assert(extract(0b1100_0010, None, 0) == 0b11000010)
+        assert(extract(0b1100_0010, 6, 0) == 0b1000010)
+        assert(extract(0b1100_0010, 6, 6) == 0b1)
+        assert(extract(0b1100_0010, 7, 6) == 0b11)
 
-    print(bin(combine(0b0010_0000, 0b1110_0001, 0b0000_0010)))
+    def combine_test():
+        assert(bin(combine(0b0010_0000, 0b1110_0001, 0b0000_0010)) == 0b1110_0011)
+
+
+    extract_test()
