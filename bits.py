@@ -1,32 +1,38 @@
 from functools import reduce
 from math import log2
-def set(value, bits):
+
+
+def set(value=0, bits=0):
     """
     Set specified bits to 1 and return new binary number
+    If value is not specified, new number is returned with only defined bits set
 
     :param value: set bits of this number
     :type value: int
     :param bits: iterable with bits indices that need to be set
-    :type bits: collections.abc.Iterable
-    :return: modified number
+    :type bits: int or collections.abc.Iterable
+    :return: number with defined bits set to 1
     """
 
-    if (not hasattr(bits, '__iter__')): bits = (bits,)
+    if (not hasattr(bits, '__iter__')):
+        return value | (1 << bits)
     for bit in bits: value |= (1 << bit)
     return value
 
 
-def clear(value, bits):
+def clear(value=0, bits=0):
     """
     Set specified bits to 0 and return new binary number
+    If value is not specified, 0 is returned
 
     :param value: set bits of this number
     :type value: int
     :param bits: iterable with bits indices that need to be cleared
     :type bits: collections.abc.Iterable
-    :return: modified number
+    :return: number with defined bits set to 0
     """
-    if (not hasattr(bits, '__iter__')): bits = (bits,)
+    if (not hasattr(bits, '__iter__')):
+        return value & ~(1 << bits)
     for bit in bits: value &= ~(1 << bit)
     return value
 
@@ -36,7 +42,7 @@ def combine(*values):
     Stich multiple values into one bit sequence
 
     :param values: numbers to combine
-    :type values: collections.abc.Iterable
+    :type values: int
     :return: number with bits from all input numbers combined
     """
 
@@ -71,17 +77,17 @@ def extract(value, frombit=None, tobit=0):
 
 if __name__ == '__main__':
     def set_test():
-        assert (set_bits(0b0011, (2, 3)) == 0b1111)
-        assert (set_bits(0b0000, (0, 1, 2, 3)) == 0b1111)
-        assert (set_bits(0b0011, ()) == 0b0011)
-        assert (set_bits(0b1111, (1, 2, 2, 3)) == 0b1111)
-        assert (set_bits(0b1111, ()) == 0b1111)
-        assert (set_bits(0b0000, (0, 1, 2, 3, 4)) == 0b11111)
-        assert (set_bits(0b0000_0000, (8)) == 0b1_0000_0000)
-        assert (set_bits(0b1000_0000, ()) == 128)
-        assert (set_bits(0b1000_0000, (7)) == 0b1000_0000)
-        assert (set_bits(0b0000_0001, (7)) == 0b1000_0001)
-        assert (set_bits(0b1, 0) == 0b1)
+        assert (set(0b0011, (2, 3)) == 0b1111)
+        assert (set(0b0000, (0, 1, 2, 3)) == 0b1111)
+        assert (set(0b0011, ()) == 0b0011)
+        assert (set(0b1111, (1, 2, 2, 3)) == 0b1111)
+        assert (set(0b1111, ()) == 0b1111)
+        assert (set(0b0000, (0, 1, 2, 3, 4)) == 0b11111)
+        assert (set(0b0000_0000, (8)) == 0b1_0000_0000)
+        assert (set(0b1000_0000, ()) == 128)
+        assert (set(0b1000_0000, (7)) == 0b1000_0000)
+        assert (set(0b0000_0001, (7)) == 0b1000_0001)
+        assert (set(0b1, 0) == 0b1)
         print("DONE")
 
     def clear_test():
@@ -114,5 +120,4 @@ if __name__ == '__main__':
     def combine_test():
         assert(bin(combine(0b0010_0000, 0b1110_0001, 0b0000_0010)) == 0b1110_0011)
 
-
-    extract_test()
+    clear_test()

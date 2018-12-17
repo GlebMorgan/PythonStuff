@@ -6,8 +6,11 @@ import sys
 import keyword
 import distutils.sysconfig
 import stdlib_list
-class InternalNameShadingVerifier():
+import bits
+from timer import Timer
 
+
+class InternalNameShadingVerifier():
 
     def __init__(self, docslibs=True, reallibs=True, builtins=True, keywords=True, internals=False):
         self.internalNamesDict = {}
@@ -47,6 +50,7 @@ class InternalNameShadingVerifier():
                 self._public_submodules_recursive(submodules, fullbasemodule, submodule)
                 submodules.append(f"{fullbasemodule}.{submodule}")
 
+
     @property
     def reservedNames(self):
         reservedNamesSet = set()
@@ -55,8 +59,10 @@ class InternalNameShadingVerifier():
                 reservedNamesSet.add(name.split(".")[-1] if '.' in name else name)
         return reservedNamesSet
 
+
     def isReserved(self, name):
         return (name in self.reservedNames)
+
 
     def showShadowedModules(self, name):
         name = f".{name}"
@@ -67,10 +73,12 @@ class InternalNameShadingVerifier():
         )
         return set(names) or '<None>'
 
+
     def showShadowedNames(self, name):
         names = []
         for currname in self.reservedNames: self._public_submodules_recursive(names, '', currname)
         return tuple(currname for currname in names if currname.endswith(f".{name}")) or '<None>'
+
 
 def isInt(num):
     """
@@ -90,7 +98,8 @@ def isInt(num):
 
 def bytewise(bBytes):
     """
-    Represents sequence of bytes as space-separated octets or '<Void>' if sequence is empty
+    Represents sequence of bytes as hexidecimal space-separated
+    octets or '<Void>' if sequence is empty or 'None'
 
     :param bBytes: bytes sequence to display
     :type bBytes: bytes
@@ -98,14 +107,35 @@ def bytewise(bBytes):
     :rtype str
     """
 
-    return " ".join(list(map(''.join, zip(*[iter(bBytes.hex())]*2)))) or '<Void>' if bBytes is not None else '<Void>'
+    return " ".join(
+            list(map(''.join, zip(*[iter(bBytes.hex().upper())]*2)))
+            ) or '<Void>' if bBytes is not None else '<Void>'
 
 
+def bytewise_format(bBytes, void='<Void>'):
+    """Same as 'bytewise' except different (more readable) implementation"""
 
+    return " ".join(f"{byte:02X}" for byte in iter(bBytes)) if bBytes else void
+
+
+def bitwise(bBytes):
+    """
+    Represents sequence of bytes as bianry space-separated
+    octets or '<Void>' if sequence is empty or 'None'
+
+    :param bBytes: bytes sequence to display
+    :type bBytes: bytes
+    :return: bitwise space-separated string
+    :rtype str
+    """
+
+    return "  ".join(
+            f"{byte>>4:04b} {bits.extract(byte, frombit=3):04b}" for byte in iter(bBytes)
+            ) if bBytes is not None else '<Void>'
 
 
 if __name__ == '__main__':
-    CHECK_ITEM = InternalNameShadingVerifier
+    CHECK_ITEM = bitwise
 
     if (CHECK_ITEM == InternalNameShadingVerifier):
         shver = InternalNameShadingVerifier(internals=0)
@@ -117,10 +147,19 @@ if __name__ == '__main__':
     if (CHECK_ITEM == bytewise):
         print(f"b'' - {bytewise(b'')}")
         print(f"None - {bytewise(None)}")
-        print(f"Bytes - {bytewise(b'AAABBCC')}")
+        print(f"Bytes - {bytewise(b'ABCDEFGHIJKLMNO')}")
         print(f"Short bytes - {bytewise(bytes.fromhex('0055FF01'))}")
         print(f"Zero bytes - {bytewise(bytes.fromhex('0000000000'))}")
         print(f"1 byte - {bytewise(bytes.fromhex('00'))}")
         print(f"two bytes - {bytewise(b'fc')}")
         # print(f"Looong bytes - {bytewise(bytes.fromhex('00'*10_000_000))}")
 
+    if (CHECK_ITEM == bytewise_format):
+        with Timer("iter"):
+            print(f"Looong bytes - {bytewise(bytes.fromhex(''.join([i.to_bytes(2, 'big').hex()for i in range(65_535)])))}")
+        with Timer("format"):
+            print(f"Looong bytes - {bytewise_format(bytes.fromhex(''.join([i.to_bytes(2, 'big').hex()for i in range(65_535)])))}")
+
+    if (CHECK_ITEM == bitwise):
+        print(bitwise(b'FGRb'))
+        print(f"{int.from_bytes(b'FGRb', 'big'):032b}")
