@@ -99,7 +99,7 @@ def isInt(num):
 def bytewise(bBytes):
     """
     Represents sequence of bytes as hexidecimal space-separated
-    octets or '<Void>' if sequence is empty or 'None'
+    octets or '<Void>' if sequence is empty or equals to None
 
     :param bBytes: bytes sequence to display
     :type bBytes: bytes
@@ -132,6 +132,38 @@ def bitwise(bBytes):
     return "  ".join(
             f"{byte>>4:04b} {bits.extract(byte, frombit=3):04b}" for byte in iter(bBytes)
             ) if bBytes is not None else '<Void>'
+
+
+#decorator
+def legacy(unused_function):
+    """
+    Force returns 'NotImplemented' on decorated function call.
+    Use to prevent unused code from execution when it should still exist in source code
+    """
+
+    @wraps(unused_function)
+    def funcWrapper(*args, **kwargs):
+        return NotImplemented
+    return funcWrapper
+
+
+#decorator
+def injectArgs(initFunc):
+    """
+    Automatically create and initialise same-name object attrs based on args passed to '__init__'
+    """
+
+    def init_wrapper(*args,**kwargs):
+        _self = args[0]
+        _self.__dict__.update(kwargs)
+        _total_names = initFunc.__code__.co_varnames[1:initFunc.__code__.co_argcount]
+        _values = args[1:]
+        _names = [n for n in _total_names if not n in kwargs]
+        d = dict()
+        for n, v in zip(_names,_values): d[n] = v
+        _self.__dict__.update(d)
+        initFunc(*args, **kwargs)
+    return init_wrapper
 
 
 if __name__ == '__main__':
