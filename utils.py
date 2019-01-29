@@ -8,6 +8,7 @@ import distutils.sysconfig
 import stdlib_list
 import bits
 from timer import Timer
+from functools import wraps
 
 
 class InternalNameShadingVerifier():
