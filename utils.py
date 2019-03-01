@@ -3,6 +3,7 @@
 import importlib
 import os
 import sys
+import sys
 import keyword
 import distutils.sysconfig
 import stdlib_list
@@ -81,7 +82,7 @@ class InternalNameShadingVerifier():
         return tuple(currname for currname in names if currname.endswith(f".{name}")) or '<None>'
 
 
-def isInt(num):
+def isint(num):
     """
     Check an object could be coarced to 'int'
 
@@ -97,20 +98,25 @@ def isInt(num):
         return False
 
 
-def bytewise(bBytes):
+def bytewise(bBytes, collapseAfter=None):
     """
     Represents sequence of bytes as hexidecimal space-separated
     octets or '<Void>' if sequence is empty or equals to None
 
     :param bBytes: bytes sequence to display
     :type bBytes: bytes
+    :param collapseAfter: defines maximum output string length. Intermediate bytes are replaced with ellipsis.
+                          No length limit if 'collapseAfter' is set to 'None'
+    :type collapseAfter: int
     :return: bytewise space-separated string
     :rtype str
     """
 
-    return " ".join(
-            list(map(''.join, zip(*[iter(bBytes.hex().upper())]*2)))
-            ) or '<Void>' if bBytes is not None else '<Void>'
+    if (not bBytes or bBytes is None): return '<Void>'
+    strRepr = " ".join(list(map(''.join, zip(*[iter(bBytes.hex().upper())]*2))))
+    if (collapseAfter is None or len(bBytes) <= collapseAfter): return strRepr
+    else: return f"{strRepr[:collapseAfter-2]} ... {strRepr[-2:]} ({len(bBytes)} bytes)"
+
 
 
 def bytewise_format(bBytes, void='<Void>'):
@@ -135,25 +141,32 @@ def bitwise(bBytes):
             ) if bBytes is not None else '<Void>'
 
 
-#decorator
-def legacy(unused_function):
+def legacy(legacy_entity):
+    """ Decorator.
+        Force prints warning mesage on legacy_function call.
+        Use to prevent legacy code from interfering with actual one
+            when it should still exist in source codes
     """
-    Force returns 'NotImplemented' on decorated function call.
-    Use to prevent unused code from execution when it should still exist in source code
+    if (type(legacy_entity) == type):
+        new_cls = type(f"old_{legacy_entity.__name__}", legacy_entity.__bases__, dict(legacy_entity.__dict__))
+        new_cls.__legacy = True
+        return new_cls
+    else:
+        @wraps(legacy_entity)
+        def funWrapper(*args, **kwargs):
+            print("!!! Function is tagged as legacy !!!")
+            return legacy_entity(*args, **kwargs)
+        funWrapper.__name__ = f"old_{funWrapper.__name__}"
+        funWrapper.legacy = True
+        return funWrapper
+
+
+def inject_args(initFunc):
+    """ __init__ decorator.
+        Automatically creates and initializes same-name object attrs based on args passed to '__init__'
     """
-
-    @wraps(unused_function)
-    def funcWrapper(*args, **kwargs):
-        return NotImplemented
-    return funcWrapper
-
-
-#decorator
-def injectArgs(initFunc):
-    """
-    Automatically create and initialise same-name object attrs based on args passed to '__init__'
-    """
-
+    # TODO: does not assign to default values specified in function defenition;
+    # like '4' in folowing function: def f(a, b, c=4): ...
     def init_wrapper(*args,**kwargs):
         _self = args[0]
         _self.__dict__.update(kwargs)
@@ -167,8 +180,93 @@ def injectArgs(initFunc):
     return init_wrapper
 
 
+def inject_slots(at):
+    """ __init__ decorator.
+        Automatically creates and initializes same-name object slots based on args passed to '__init__'
+    """
+    #TODO: does not assign to default values specified in function defenition;
+    # like '4' in folowing function: def f(a, b, c=4): ...
+    if (type(at) is not str):
+        f = at
+        at = 'start'
+    elif (at not in ('start', 's', 'end', 'e')):
+        raise ValueError("Define slots injection order as 'start' or 'end'")
+    def decorator_inject_slots(initFunc):
+        @wraps(initFunc)
+        def init_wrapper(*args,**kwargs):
+            if (at == 'start' or at == 's'): initFunc(*args, **kwargs)
+            _self = args[0]
+            try: _self.__slots__
+            except AttributeError: raise TypeError(f"Class '{_self.__class__.__name__}' does not have __slots__ set")
+            for par, value in kwargs.items(): object.__setattr__(_self, par, value)
+            _total_names = initFunc.__code__.co_varnames[1:initFunc.__code__.co_argcount]
+            _values = args[1:]
+            _names = [n for n in _total_names if not n in kwargs]
+            args_dict = dict()
+            for n, v in zip(_names,_values): args_dict[n] = v
+            for par, value in args_dict.items(): object.__setattr__(_self, par, value)
+            if (at == 'end' or at == 'e'): initFunc(*args, **kwargs)
+        return init_wrapper
+    return decorator_inject_slots(f)
+
+
+def add_slots(oldclass):
+    """ Class decorator.
+        Adds __slots__ to the class attrs that were annotated,
+        except ones annotated with typing.ClassVar - those are left
+        as conventional class variables
+    """
+
+    oldclass_dict = dict(oldclass.__dict__)
+    # inherited_slots = set().union(*(getattr(c, '__slots__', set()) for c in oldclass.mro()))
+    field_names = tuple(var[0] for var in getattr(oldclass, '__annotations__').items()
+                            if not (str(var[1]).startswith('ClassVar[') and str(var[1]).endswith(']')))
+
+    oldclass_dict['__slots__'] = tuple(field for field in field_names)  # '... if field not in inherited_slots'
+    for f in field_names: oldclass_dict.pop(f, None)
+    oldclass_dict.pop('__dict__', None)
+    oldclass_dict.pop('__weakref__', None)
+    newclass = type(oldclass.__name__, oldclass.__bases__, oldclass_dict)
+    newclass.__qualname__ = getattr(oldclass, '__qualname__')
+
+    return newclass
+
+
+def store_value(name):
+    """ Decorator (to use with methods only!) to cach single-output result
+        Returns existing 'class.name' attr if one exists
+        Otherwise computes and creates it first
+    """
+    if(type(name) is not str): raise TypeError("Attribute name is required")
+    def store_value_decorator(f):
+        @wraps(f)
+        def wrapper(self, *args, **kwargs):
+            try: return getattr(self, name)
+            except AttributeError:
+                setattr(self, name, f(self, *args, **kwargs))
+                return getattr(self, name)
+        return wrapper
+    return store_value_decorator
+
+
+def auto_repr(object, msg):
+    return f"{object.__class__.__module__}.{object.__class__.__name__} {msg} at {id(object):X}"
+
+
+def init_class(method):
+    """ Calls 'method' class method (should take no arguments)
+        immediately after class creation """
+
+    if (type(method) is not str): raise TypeError("Method name is required")
+
+    def decorator_init_class(cls):
+        getattr(cls, method).__call__()
+        return cls
+    return decorator_init_class
+
+
 if __name__ == '__main__':
-    CHECK_ITEM = bitwise
+    CHECK_ITEM = inject_args
 
     if (CHECK_ITEM == InternalNameShadingVerifier):
         shver = InternalNameShadingVerifier(internals=0)
@@ -196,3 +294,39 @@ if __name__ == '__main__':
     if (CHECK_ITEM == bitwise):
         print(bitwise(b'FGRb'))
         print(f"{int.from_bytes(b'FGRb', 'big'):032b}")
+
+    if (CHECK_ITEM == legacy):
+        class A:
+            a = "new_a"
+            print("##")
+        @legacy
+        class A:
+            a = "legacy_A"
+            print("!!")
+        @legacy
+        def fun(): print('fuuun!')
+        print(A.a)
+        fun()
+        print(fun.legacy)
+
+    if (CHECK_ITEM == inject_slots):
+        class TestInjetSlots:
+            __slots__ = ('a', 'b', 'c', 'd')
+
+            @inject_slots
+            def __init__(self, a, b, c=4, d=8): print("finished __init__")
+
+        t = TestInjetSlots('avar', 'bvar')
+        print(*(t.a, t.b, t.c, t.d))
+
+    if (CHECK_ITEM == inject_args):
+        class TestInjetArgs:
+            @inject_args
+            def __init__(self, a, b, c=4, d=8): print("finished __init__")
+
+
+        t = TestInjetArgs('avar', 'bvar')
+        print(*(t.a, t.b, t.c, t.d))
+
+
+
