@@ -1,15 +1,11 @@
-#TODO: classes use their own imports
-
-import importlib
-import os
-import sys
-import sys
-import keyword
-import distutils.sysconfig
-import stdlib_list
-import bits
-from timer import Timer
 from functools import wraps
+from os import linesep
+from decorator import decorator
+
+import bits
+import stdlib_list
+from colored_logger import ColorHandler
+from timer import Timer
 
 
 class InternalNameShadingVerifier():
@@ -18,31 +14,35 @@ class InternalNameShadingVerifier():
         self.internalNamesDict = {}
         self.checkinternals = internals
         if (docslibs): self.internalNamesDict['docslibs'] = stdlib_list.stdlib_list()
-        if (keywords): self.internalNamesDict['keywords'] = keyword.kwlist
+        if (keywords):
+            import keyword
+            self.internalNamesDict['keywords'] = keyword.kwlist
         if (builtins):
             modules = []
             try:
+                import sys
                 for modulename in sys.builtin_module_names:
                     if (not modulename.startswith('_')): self._public_submodules_recursive(modules, '', modulename)
             except RecursionError: modules.append(...)
 
             self.internalNamesDict['builtins'] = modules
         if (reallibs):
+            import distutils.sysconfig, os
             stdlib_items = []
             std_lib = distutils.sysconfig.get_python_lib(standard_lib=True)
             for top, dirs, files in os.walk(std_lib):
                 for nm in files:
-                    prefix = top[len(std_lib)+1:]
+                    prefix = top[len(std_lib) + 1:]
                     if nm == '__init__.py':
-                        stdlib_items.append(top[len(std_lib)+1:].replace(os.path.sep,'.'))
+                        stdlib_items.append(top[len(std_lib) + 1:].replace(os.path.sep, '.'))
                     elif nm[-3:] == '.py':
-                        stdlib_items.append(os.path.join(prefix, nm)[:-3].replace(os.path.sep,'.'))
+                        stdlib_items.append(os.path.join(prefix, nm)[:-3].replace(os.path.sep, '.'))
                     elif nm[-3:] == '.so' and top[-11:] == 'lib-dynload':
                         stdlib_items.append(nm[0:-3])
             self.internalNamesDict['actuallibs'] = stdlib_items
 
-
     def _public_submodules_recursive(self, submodules, basemodule, currname):
+        import importlib
         if (currname in ('this', 'antigravity')): return
         fullbasemodule = f"{basemodule}.{currname}" if basemodule else currname
         try: currmodule = importlib.import_module(fullbasemodule)
@@ -52,7 +52,6 @@ class InternalNameShadingVerifier():
                 self._public_submodules_recursive(submodules, fullbasemodule, submodule)
                 submodules.append(f"{fullbasemodule}.{submodule}")
 
-
     @property
     def reservedNames(self):
         reservedNamesSet = set()
@@ -61,20 +60,17 @@ class InternalNameShadingVerifier():
                 reservedNamesSet.add(name.split(".")[-1] if '.' in name else name)
         return reservedNamesSet
 
-
     def isReserved(self, name):
         return (name in self.reservedNames)
-
 
     def showShadowedModules(self, name):
         name = f".{name}"
         names = (moduleName
-                for key in self.internalNamesDict
-                    for moduleName in self.internalNamesDict[key]
-                        if (moduleName.endswith(name))
-        )
+                 for key in self.internalNamesDict
+                 for moduleName in self.internalNamesDict[key]
+                 if (moduleName.endswith(name))
+                 )
         return set(names) or '<None>'
-
 
     def showShadowedNames(self, name):
         names = []
@@ -113,10 +109,9 @@ def bytewise(bBytes, collapseAfter=None):
     """
 
     if (not bBytes or bBytes is None): return '<Void>'
-    strRepr = " ".join(list(map(''.join, zip(*[iter(bBytes.hex().upper())]*2))))
+    strRepr = " ".join(list(map(''.join, zip(*[iter(bBytes.hex().upper())] * 2))))
     if (collapseAfter is None or len(bBytes) <= collapseAfter): return strRepr
-    else: return f"{strRepr[:collapseAfter-2]} ... {strRepr[-2:]} ({len(bBytes)} bytes)"
-
+    else: return f"{strRepr[:collapseAfter - 2]} ... {strRepr[-2:]} ({len(bBytes)} bytes)"
 
 
 def bytewise_format(bBytes, void='<Void>'):
@@ -137,8 +132,8 @@ def bitwise(bBytes):
     """
 
     return "  ".join(
-            f"{byte>>4:04b} {bits.extract(byte, frombit=3):04b}" for byte in iter(bBytes)
-            ) if bBytes is not None else '<Void>'
+            f"{byte >> 4:04b} {bits.extract(byte, frombit=3):04b}" for byte in iter(bBytes)
+    ) if bBytes is not None else '<Void>'
 
 
 def legacy(legacy_entity):
@@ -156,6 +151,7 @@ def legacy(legacy_entity):
         def funWrapper(*args, **kwargs):
             print("!!! Function is tagged as legacy !!!")
             return legacy_entity(*args, **kwargs)
+
         funWrapper.__name__ = f"old_{funWrapper.__name__}"
         funWrapper.legacy = True
         return funWrapper
@@ -165,18 +161,20 @@ def inject_args(initFunc):
     """ __init__ decorator.
         Automatically creates and initializes same-name object attrs based on args passed to '__init__'
     """
+
     # TODO: does not assign to default values specified in function defenition;
     # like '4' in folowing function: def f(a, b, c=4): ...
-    def init_wrapper(*args,**kwargs):
+    def init_wrapper(*args, **kwargs):
         _self = args[0]
         _self.__dict__.update(kwargs)
         _total_names = initFunc.__code__.co_varnames[1:initFunc.__code__.co_argcount]
         _values = args[1:]
         _names = [n for n in _total_names if not n in kwargs]
         d = dict()
-        for n, v in zip(_names,_values): d[n] = v
+        for n, v in zip(_names, _values): d[n] = v
         _self.__dict__.update(d)
         initFunc(*args, **kwargs)
+
     return init_wrapper
 
 
@@ -184,16 +182,17 @@ def inject_slots(at):
     """ __init__ decorator.
         Automatically creates and initializes same-name object slots based on args passed to '__init__'
     """
-    #TODO: does not assign to default values specified in function defenition;
+    # TODO: does not assign to default values specified in function defenition;
     # like '4' in folowing function: def f(a, b, c=4): ...
     if (type(at) is not str):
         f = at
         at = 'start'
     elif (at not in ('start', 's', 'end', 'e')):
         raise ValueError("Define slots injection order as 'start' or 'end'")
+
     def decorator_inject_slots(initFunc):
         @wraps(initFunc)
-        def init_wrapper(*args,**kwargs):
+        def init_wrapper(*args, **kwargs):
             if (at == 'start' or at == 's'): initFunc(*args, **kwargs)
             _self = args[0]
             try: _self.__slots__
@@ -203,10 +202,12 @@ def inject_slots(at):
             _values = args[1:]
             _names = [n for n in _total_names if not n in kwargs]
             args_dict = dict()
-            for n, v in zip(_names,_values): args_dict[n] = v
+            for n, v in zip(_names, _values): args_dict[n] = v
             for par, value in args_dict.items(): object.__setattr__(_self, par, value)
             if (at == 'end' or at == 'e'): initFunc(*args, **kwargs)
+
         return init_wrapper
+
     return decorator_inject_slots(f)
 
 
@@ -220,7 +221,7 @@ def add_slots(oldclass):
     oldclass_dict = dict(oldclass.__dict__)
     # inherited_slots = set().union(*(getattr(c, '__slots__', set()) for c in oldclass.mro()))
     field_names = tuple(var[0] for var in getattr(oldclass, '__annotations__').items()
-                            if not (str(var[1]).startswith('ClassVar[') and str(var[1]).endswith(']')))
+                        if not (str(var[1]).startswith('ClassVar[') and str(var[1]).endswith(']')))
 
     oldclass_dict['__slots__'] = tuple(field for field in field_names)  # '... if field not in inherited_slots'
     for f in field_names: oldclass_dict.pop(f, None)
@@ -237,7 +238,8 @@ def store_value(name):
         Returns existing 'class.name' attr if one exists
         Otherwise computes and creates it first
     """
-    if(type(name) is not str): raise TypeError("Attribute name is required")
+    if (type(name) is not str): raise TypeError("Attribute name is required")
+
     def store_value_decorator(f):
         @wraps(f)
         def wrapper(self, *args, **kwargs):
@@ -245,7 +247,9 @@ def store_value(name):
             except AttributeError:
                 setattr(self, name, f(self, *args, **kwargs))
                 return getattr(self, name)
+
         return wrapper
+
     return store_value_decorator
 
 
@@ -262,14 +266,67 @@ def init_class(method):
     def decorator_init_class(cls):
         getattr(cls, method).__call__()
         return cls
+
     return decorator_init_class
 
 
+def injectProperties(init_func):
+    """ Used to separate object native properties from service attributes
+        Class whose '__init__()' is wrapped should define 'init()' method
+            that handles all remaining class initialization (including creation of service attrs)
+        Attr names defined in '__init__()' will be collected into new tuple 'self.props' """
+
+    if (init_func.__name__ != '__init__'):
+        raise SyntaxError("'injectProperties' decorator is intended to wrap '__init__' only")
+
+    @wraps(init_func)
+    def wrapper(init_self, *a, **kw):
+        init_func(init_self, *a, **kw)
+        props = []
+        for a in vars(init_self):
+            props.append(a)
+        init_self.props = tuple(props)
+        init_self.init()
+
+    return wrapper
+
+
+def getLogger(name):
+    import logging
+    import traceback
+
+    class MyLogger(logging.Logger):
+
+        def __init__(self, loggerName):
+            super().__init__(loggerName)
+
+        def showError(self, error):
+            self.error(f"{error.__class__.__name__}: {error.args[0] if error.args else '<No details>'}" +
+                       (linesep + f"{error.dataname}: {bytewise(error.data)}" if hasattr(error, 'data') else ''))
+
+        def showStackTrace(self, e):
+            self.error(f"{e.__class__.__name__}: {e.args[0] if e.args else '<No details>'}")
+            for line in traceback.format_tb(e.__traceback__):
+                if (line): self.error(line.strip())
+
+    logging.setLoggerClass(MyLogger)
+    log = logging.getLogger(name)
+    log.setLevel(logging.DEBUG)
+    log.addHandler(ColorHandler(format="[{name}: {module} → {funcName}]\t\t{message}"))
+    return log
+
+
+Logger = getLogger
+
+
+def alias(this: type): return this
+
+
 if __name__ == '__main__':
-    CHECK_ITEM = inject_args
+    CHECK_ITEM = Logger
 
     if (CHECK_ITEM == InternalNameShadingVerifier):
-        shver = InternalNameShadingVerifier(internals=0)
+        shver = InternalNameShadingVerifier(internals=False)
         # print(shver.reservedNames)
         print(shver.isReserved("c"))
         print(shver.showShadowedModules("c"))
@@ -287,9 +344,11 @@ if __name__ == '__main__':
 
     if (CHECK_ITEM == bytewise_format):
         with Timer("iter"):
-            print(f"Looong bytes - {bytewise(bytes.fromhex(''.join([i.to_bytes(2, 'big').hex()for i in range(65_535)])))}")
+            print(f"Looong bytes - "
+                  f"{bytewise(bytes.fromhex(''.join([i.to_bytes(2, 'big').hex() for i in range(65_535)])))}")
         with Timer("format"):
-            print(f"Looong bytes - {bytewise_format(bytes.fromhex(''.join([i.to_bytes(2, 'big').hex()for i in range(65_535)])))}")
+            print(f"Looong bytes - "
+                  f"{bytewise_format(bytes.fromhex(''.join([i.to_bytes(2, 'big').hex() for i in range(65_535)])))}")
 
     if (CHECK_ITEM == bitwise):
         print(bitwise(b'FGRb'))
@@ -299,12 +358,18 @@ if __name__ == '__main__':
         class A:
             a = "new_a"
             print("##")
+
+
         @legacy
         class A:
             a = "legacy_A"
             print("!!")
+
+
         @legacy
         def fun(): print('fuuun!')
+
+
         print(A.a)
         fun()
         print(fun.legacy)
@@ -315,6 +380,7 @@ if __name__ == '__main__':
 
             @inject_slots
             def __init__(self, a, b, c=4, d=8): print("finished __init__")
+
 
         t = TestInjetSlots('avar', 'bvar')
         print(*(t.a, t.b, t.c, t.d))
@@ -328,5 +394,8 @@ if __name__ == '__main__':
         t = TestInjetArgs('avar', 'bvar')
         print(*(t.a, t.b, t.c, t.d))
 
-
-
+    if (CHECK_ITEM == Logger):
+        l = getLogger("Test")
+        # print(dir(l))
+        l.debug("Debug msg")
+        l.showError(Exception("test exception"))

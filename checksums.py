@@ -27,6 +27,7 @@ def lrc(msgBytes):
     :rtype:          bytes
     """
 
+    if (msgBytes == b''): return b''
     return int.to_bytes(reduce(lambda x,y: x^y, msgBytes), length=1, byteorder='big')
 
 

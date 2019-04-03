@@ -2,7 +2,7 @@ from functools import reduce
 from math import log2
 
 
-def set(value=0, bits=0):
+def set(bits=0, value=0):
     """
     Set specified bits to 1 and return new binary number
     If value is not specified, new number is returned with only defined bits set
@@ -52,15 +52,15 @@ def combine(*values):
 def split(): NotImplemented
 
 
-def extract(value, frombit=None, tobit=0):
+def extract(val, frombit=None, tobit=0):
     """
-    Extract number from 'value' based on provided limits [frombit..tobit], both inclusive
+    Extract number from 'val' based on provided limits [frombit..tobit], both inclusive
     Ex: extract(0b001_110_10, 2, 4) == 0b110
         extract(0b01_0_1, 1, 1) == 0b0
         extract(0b000_1, 0) == 0b1
 
-    :param value: integer number to be masked
-    :type value: int
+    :param val: integer number to be masked
+    :type val: int
     :param frombit: first mask bit index (right to left bit order)
     :type frombit: int
     :param tobit: last mask bit index (right to left bit order)
@@ -69,10 +69,38 @@ def extract(value, frombit=None, tobit=0):
     :rtype: int
     """
 
-    if (value == 0): return 0
+    if (val == 0): return 0
     # set 'frombit' to leftmost meaningful bit if undefined
-    if (not frombit): frombit = int(log2(value))+1
-    return (value & ((1<<frombit+1) - 1)) >> tobit
+    if (not frombit): frombit = int(log2(val))+1
+    return (val & ((1<<frombit+1) - 1)) >> tobit
+
+
+def flag(val, pos):
+    """
+    Extract one-bit boolean value from 'value'
+
+    :param val: integer number, typically representing a flags array
+    :type val: int
+    :param pos: position of requested bit in flags array
+    :type pos: int
+    :return: extracted flag bit
+    :rtype: bool
+    """
+
+    return bool((val >> pos) & 0b1)
+
+
+def flags(val, n):
+    """ Convert 'n' rightmost bits of number 'val' to tuple of bools (ordered right to left) """
+
+    return tuple(bool((val >> i) & 0b1) for i in range(n))
+
+
+def bitsarray(*args)->int:
+    """ Accepts any number of flags (booleans) and packs them into an integer
+        representing input flags in given order """
+
+    return combine(*map(lambda i: args[i]<<i, range(len(args))))
 
 
 if __name__ == '__main__':
@@ -118,6 +146,6 @@ if __name__ == '__main__':
         assert(extract(0b0101, 1, 1) == 0b0)
 
     def combine_test():
-        assert(bin(combine(0b0010_0000, 0b1110_0001, 0b0000_0010)) == 0b1110_0011)
+        print(bin(combine(0b0010_0000, 0b1110_0001, 0b0000_0010)))
 
-    clear_test()
+    combine_test()
