@@ -253,8 +253,8 @@ def store_value(name):
     return store_value_decorator
 
 
-def auto_repr(object, msg):
-    return f"{object.__class__.__module__}.{object.__class__.__name__} {msg} at {id(object):X}"
+def auto_repr(obj, msg):
+    return f"<{obj.__class__.__module__}.{obj.__class__.__name__} {msg} at {id(obj):X}>"
 
 
 def init_class(method):
@@ -312,7 +312,7 @@ def getLogger(name):
     logging.setLoggerClass(MyLogger)
     log = logging.getLogger(name)
     log.setLevel(logging.DEBUG)
-    log.addHandler(ColorHandler(format="[{name}: {module} → {funcName}]\t\t{message}"))
+    log.addHandler(ColorHandler(format="[{name}: {module} → {funcName}] {message}"))
     return log
 
 
