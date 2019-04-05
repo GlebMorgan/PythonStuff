@@ -291,39 +291,11 @@ def injectProperties(init_func):
     return wrapper
 
 
-def getLogger(name):
-    import logging
-    import traceback
-
-    class MyLogger(logging.Logger):
-
-        def __init__(self, loggerName):
-            super().__init__(loggerName)
-
-        def showError(self, error):
-            self.error(f"{error.__class__.__name__}: {error.args[0] if error.args else '<No details>'}" +
-                       (linesep + f"{error.dataname}: {bytewise(error.data)}" if hasattr(error, 'data') else ''))
-
-        def showStackTrace(self, e):
-            self.error(f"{e.__class__.__name__}: {e.args[0] if e.args else '<No details>'}")
-            for line in traceback.format_tb(e.__traceback__):
-                if (line): self.error(line.strip())
-
-    logging.setLoggerClass(MyLogger)
-    log = logging.getLogger(name)
-    log.setLevel(logging.DEBUG)
-    log.addHandler(ColorHandler(format="[{name}: {module} → {funcName}] {message}"))
-    return log
-
-
-Logger = getLogger
-
-
 def alias(this: type): return this
 
 
 if __name__ == '__main__':
-    CHECK_ITEM = Logger
+    CHECK_ITEM = ...
 
     if (CHECK_ITEM == InternalNameShadingVerifier):
         shver = InternalNameShadingVerifier(internals=False)
@@ -393,9 +365,3 @@ if __name__ == '__main__':
 
         t = TestInjetArgs('avar', 'bvar')
         print(*(t.a, t.b, t.c, t.d))
-
-    if (CHECK_ITEM == Logger):
-        l = getLogger("Test")
-        # print(dir(l))
-        l.debug("Debug msg")
-        l.showError(Exception("test exception"))
