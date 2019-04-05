@@ -14,10 +14,23 @@ I = INFO = logging.INFO
 D = DEBUG = logging.DEBUG
 N = NOTSET = logging.NOTSET
 
-LOGGERS = {}
 
+class Logger:
 
-def Logger(name):
+    LOGGERS = {}
+
+    def __new__(cls, name):
+        if (not sys.stdout.isatty()):
+            handler = ColorHandler(format="[{name}: {module} → {funcName}] {message}")
+        else:
+            handler = logging.StreamHandler()
+            handler.setFormatter(logging.Formatter("[{name}: {module} → {funcName}] {message}", style='{'))
+        logging.setLoggerClass(cls.MyLogger)
+        log = logging.getLogger(name)
+        log.setLevel(logging.DEBUG)
+        log.addHandler(handler)
+        cls.LOGGERS[log.name] = log
+        return log
 
     class MyLogger(logging.Logger):
 
@@ -31,24 +44,11 @@ def Logger(name):
         def showStackTrace(self, error):
             info = f"{error.__class__.__name__}: {error.args[0] if error.args else '<No details>'}"
             info += linesep + f"{error.dataname}: {bytewise(error.data)}" if hasattr(error, 'data') else '' + linesep
-            for line in traceback.format_tb(error.__traceback__):
-                if (line): info += line.strip()
+            info += linesep.join(line.strip() for line in traceback.format_tb(error.__traceback__) if line)
             self.error(info)
 
         dataerror = showError
         stacktrace = showStackTrace
-
-    if (not sys.stdout.isatty()):
-        handler = ColorHandler(format="[{name}: {module} → {funcName}] {message}")
-    else:
-        handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter("[{name}: {module} → {funcName}] {message}", style='{'))
-    logging.setLoggerClass(MyLogger)
-    log = logging.getLogger(name)
-    log.setLevel(logging.DEBUG)
-    log.addHandler(handler)
-    LOGGERS[log.name] = log
-    return log
 
 
 getLogger = Logger
@@ -66,9 +66,9 @@ if __name__ == '__main__':
     except Exception as e:
         l.stacktrace(e)
 
-    print(f"LOGGERS: {LOGGERS}")
+    print(f"LOGGERS: {Logger.LOGGERS}")
 
-    LOGGERS['Test'].setLevel(INFO)
+    Logger.LOGGERS['Test'].setLevel(INFO)
     l.debug("Test debug msg")
     l.warning("Test warning msg")
     l.critical("Test critical msg")
