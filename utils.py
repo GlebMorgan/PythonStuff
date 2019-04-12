@@ -1,10 +1,8 @@
+from contextlib import contextmanager
 from functools import wraps
-from os import linesep
-from decorator import decorator
 
 import bits
 import stdlib_list
-from colored_logger import ColorHandler
 from timer import Timer
 
 
@@ -183,7 +181,7 @@ def inject_slots(at):
         Automatically creates and initializes same-name object slots based on args passed to '__init__'
     """
     # TODO: does not assign to default values specified in function defenition;
-    # like '4' in folowing function: def f(a, b, c=4): ...
+    # like '4' in following function: def f(a, b, c=4): ...
     if (type(at) is not str):
         f = at
         at = 'start'
@@ -292,6 +290,12 @@ def injectProperties(init_func):
 
 
 def alias(this: type): return this
+
+
+@contextmanager
+def this(ref):
+    """ Shorten long expressions to one name """
+    yield ref
 
 
 if __name__ == '__main__':

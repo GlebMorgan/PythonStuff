@@ -60,15 +60,20 @@ class ColorHandler(logging.StreamHandler):
         logging.CRITICAL: "red",
     }
 
-    def __init__(self, stream=sys.stdout, format=''):
-        super().__init__(_AnsiColorizer(stream))
+    def __init__(self, colorize=True, stream=sys.stdout, format=''):
+        self.colorize = colorize
+        if colorize: super().__init__(_AnsiColorizer(stream))
+        else: super().__init__(stream)
         self.setFormatter(logging.Formatter(format, style='{'))
 
     def emit(self, record):
         color = __class__.msg_colors.get(record.levelno, "black")
         # self.stream.write(str(record.msg) + "\n", color)
         try:
-            self.stream.write(self.format(record), color)
+            if self.colorize:
+                self.stream.write(self.format(record), color)
+            else:
+                self.stream.write(self.format(record))
             self.stream.write(self.terminator)
             self.flush()
         except Exception:
