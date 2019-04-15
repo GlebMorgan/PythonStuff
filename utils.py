@@ -252,7 +252,7 @@ def store_value(name):
 
 
 def auto_repr(obj, msg):
-    return f"<{obj.__class__.__module__}.{obj.__class__.__name__} {msg} at {id(obj):X}>"
+    return f"<{obj.__class__.__module__}.{obj.__class__.__qualname__} {msg} at {hex(id(obj))}>"
 
 
 def init_class(method):
@@ -296,6 +296,17 @@ def alias(this: type): return this
 def this(ref):
     """ Shorten long expressions to one name """
     yield ref
+
+
+class VerboseError:
+    __slots__ = ('data', 'dataname')
+
+    def __init__(self, *args, data=None, dataname=None):
+        if (data is not None):
+            if (dataname is None): self.dataname = "Bytes"
+            else: self.dataname = dataname
+            self.data = data
+        super().__init__(*args)
 
 
 if __name__ == '__main__':

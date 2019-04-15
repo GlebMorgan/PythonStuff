@@ -42,8 +42,9 @@ class Logger:
             self.colorHandler = None
 
         def showError(self, error, level='error'):
-            self.log(logging._nameToLevel[level.upper()], f"{error.__class__.__name__}: {error.args[0] if error.args else '<No details>'}" +
-                       (linesep + f"{error.dataname}: {bytewise(error.data)}" if hasattr(error, 'data') else ''))
+            self.log(logging._nameToLevel[level.upper()],
+                     f"{error.__class__.__name__}: {error.args[0] if error.args else '<No details>'}" +
+                     linesep + f"{error.dataname}: {bytewise(error.data)}" if hasattr(error, 'data') else '')
 
         def showStackTrace(self, error, level='ERROR'):
             info = f"{error.__class__.__name__}: {error.args[0] if error.args else '<No details>'}"
