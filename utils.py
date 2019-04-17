@@ -1,9 +1,12 @@
 from contextlib import contextmanager
 from functools import wraps
+from itertools import chain
+from os import linesep
 
 import bits
 import stdlib_list
 from timer import Timer
+from typing import Union
 
 
 class InternalNameShadingVerifier():
@@ -305,6 +308,60 @@ class VerboseError:
             else: self.dataname = dataname
             self.data = data
         super().__init__(*args)
+
+
+def castStr(targetType: type, value: str) -> Union[None, str, int, float, bool]:
+    """ Convert string 'value' to specified type (non case-sensitively).
+        ['True', 'Yes', '1', 'ON']  —> True <bool>
+        ['False', 'No', '0', 'OFF'] —> False <bool>
+        ['12', '0xC', '0b1100']     —> 12 <int>
+        ['0.1', '1E-1', '1.00E-1']  —> 12 <int>
+        'any_str'                   —> 'any_str' <str> """
+
+    value = value.lower()
+
+    if targetType is str:
+        return value
+
+    if targetType is bool:
+        if value in ('true', 'yes', '1', 'on'): return True
+        elif value in ('false', 'no', '0', 'off'): return False
+
+    elif targetType is int:
+        try:
+            if (value[:2] == '0x'): return int(value, 16)
+            elif (value[:2] == '0b'): return int(value, 2)
+            else: return int(value)
+        except ValueError: pass  # Value error will be raised at the end of function
+
+    elif targetType is float:
+        try:
+            return float(value)
+        except ValueError: pass  # Again, value error will be raised below
+
+    elif targetType is None: return None
+
+    # if got here ▼, that was invalid string representation of specified type
+    raise ValueError(f"Cannot convert '{value}' to {targetType}")
+
+
+def formatDict(d: dict, indent=4):
+    """ Return string representation of mapping in a following format:
+        {
+            '<name1>' = str(<value1>)
+            '<name2>' = this mapping  # ◄ if <value2> is a self reference
+            '<name3>' = str(<value3>)
+            ...
+        }
+    """
+
+    lines = (f"{' ' * indent}'{name:s}' = {value:s}" if value is not d else '<this mapping>'
+             for name, value in d.items())
+    return linesep.join(chain('{', lines, '}'))
+
+
+
+
 
 
 if __name__ == '__main__':

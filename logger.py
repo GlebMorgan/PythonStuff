@@ -44,11 +44,11 @@ class Logger:
         def showError(self, error, level='error'):
             self.log(logging._nameToLevel[level.upper()],
                      f"{error.__class__.__name__}: {error.args[0] if error.args else '<No details>'}" +
-                     linesep + f"{error.dataname}: {bytewise(error.data)}" if hasattr(error, 'data') else '')
+                     linesep + (f"{error.dataname}: {bytewise(error.data)}" if hasattr(error, 'data') else ''))
 
         def showStackTrace(self, error, level='ERROR'):
             info = f"{error.__class__.__name__}: {error.args[0] if error.args else '<No details>'}"
-            info += linesep + f"{error.dataname}: {bytewise(error.data)}" if hasattr(error, 'data') else '' + linesep
+            info += linesep + (f"{error.dataname}: {bytewise(error.data)}" if hasattr(error, 'data') else '') + linesep
             info += linesep.join(line.strip() for line in traceback.format_tb(error.__traceback__) if line)
             error.__traceback__ = None  # ◄ NOTE: if remove this line, traceback recursively repeats itself
                                         #         undefined circumstances (when in a loop, s)
