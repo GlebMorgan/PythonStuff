@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from functools import wraps
 from itertools import chain
 from os import linesep
+from os.path import abspath, dirname
 
 import bits
 import stdlib_list
@@ -345,19 +346,26 @@ def castStr(targetType: type, value: str) -> Union[None, str, int, float, bool]:
     raise ValueError(f"Cannot convert '{value}' to {targetType}")
 
 
-def formatDict(d: dict, indent=4):
+def formatDict(d: dict, indent=4, level=0):
     """ Return string representation of mapping in a following format:
         {
-            '<name1>' = str(<value1>)
-            '<name2>' = this mapping  # ◄ if <value2> is a self reference
-            '<name3>' = str(<value3>)
+            <name1>: str(<value1>)
+            <name2>: self  # ◄ if <value2> is a self reference
+            <name3>: {
+                <nestedName1>: str(<nestedValue1>)
+                <nestedName2>: str(<nestedValue2>)
+                ...
+            }
             ...
-        }
-    """
+        } """
 
-    lines = (f"{' ' * indent}'{name:s}' = {value:s}" if value is not d else '<this mapping>'
-             for name, value in d.items())
-    return linesep.join(chain('{', lines, '}'))
+    def iteritems(dct):
+        for name, value in dct.items():
+            if value is dct: value = '<self>'
+            elif isinstance(value, dict): value = formatDict(value, level=level+1)
+            yield f"{' '*indent*(level+1)}{name}: {str(value)}"
+
+    return linesep.join(chain('{', iteritems(d), (' ' * indent * level + '}',)))
 
 
 

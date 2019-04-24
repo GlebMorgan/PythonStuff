@@ -20,6 +20,16 @@ class Logger:
     LOGGERS = {}
 
     LEVELS = logging._nameToLevel
+    LEVELS_SHORT = {
+        'C': 'CRITICAL',
+        'F': 'FATAL',
+        'E': 'ERROR',
+        'W': 'WARN',
+        'W': 'WARNING',
+        'I': 'INFO',
+        'D': 'DEBUG',
+        'N': 'NOTSET',
+    }
 
     def __new__(cls, name, mode=None):
         logging.setLoggerClass(cls.MyLogger)
