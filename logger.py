@@ -24,7 +24,6 @@ class Logger:
         'C': 'CRITICAL',
         'F': 'FATAL',
         'E': 'ERROR',
-        'W': 'WARN',
         'W': 'WARNING',
         'I': 'INFO',
         'D': 'DEBUG',
@@ -61,7 +60,7 @@ class Logger:
             info += linesep + (f"{error.dataname}: {bytewise(error.data)}" if hasattr(error, 'data') else '') + linesep
             info += linesep.join(line.strip() for line in traceback.format_tb(error.__traceback__) if line)
             error.__traceback__ = None  # ◄ NOTE: if remove this line, traceback recursively repeats itself
-                                        #         undefined circumstances (when in a loop, s)
+                                        #         under undefined circumstances (when in a loop, s)
             self.log(logging._nameToLevel[level.upper()], info)
 
         def _log(self, *args, repeat=False, **kwargs):
@@ -89,6 +88,16 @@ class Logger:
 
         dataerror = showError
         stacktrace = showStackTrace
+
+        def disableOthers(self):
+            for logger in Logger.LOGGERS.values():
+                if logger is not self:
+                    logger.disabled = True
+
+        def setOthersTo(self, level):
+            for logger in Logger.LOGGERS.values():
+                if logger is not self:
+                    logger.setLevel(level)
 
 
 getLogger = Logger
