@@ -368,6 +368,22 @@ def formatDict(d: dict, indent=4, level=0):
     return linesep.join(chain('{', iteritems(d), (' ' * indent * level + '}',)))
 
 
+def memo(f):
+    """ Cache no-side-effect function/method outputs
+        Function arguments must be immutable
+        'self' argument in methods is not cached """
+    excludeFirst = True if 'self' in f.__code__.co_varnames else False
+    memory = {}
+
+    @wraps(f)
+    def memoize_wrapper(*args, **kwargs):
+        if not kwargs: key = args[excludeFirst:]
+        else: key = (tuple(args), frozenset(kwargs.items()))
+        print(args, key)
+        if key not in memory: memory[key] = f(*args, **kwargs)
+        return memory[key]
+    return memoize_wrapper
+
 
 
 
