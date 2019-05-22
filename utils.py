@@ -369,7 +369,7 @@ def formatDict(d: dict, indent=4, level=0):
 
 
 def memo(f):
-    """ Cache no-side-effect function/method outputs
+    """ Cache every no-side-effect function/method output
         Function arguments must be immutable
         'self' argument in methods is not cached """
     excludeFirst = True if 'self' in f.__code__.co_varnames else False
@@ -379,10 +379,26 @@ def memo(f):
     def memoize_wrapper(*args, **kwargs):
         if not kwargs: key = args[excludeFirst:]
         else: key = (tuple(args), frozenset(kwargs.items()))
-        print(args, key)
         if key not in memory: memory[key] = f(*args, **kwargs)
         return memory[key]
     return memoize_wrapper
+
+
+def memoLastPosArgs(f):
+    """ Cache single last no-side-effect function/method output
+        Function should accept positional arguments only
+        'self' argument in methods is not cached """
+    f.cachedArgs = None
+    f.cachedRes = None
+    excludeFirst = True if 'self' in f.__code__.co_varnames else False
+
+    def wrapper(*args):
+        if args[excludeFirst:] != f.cachedArgs:
+            f.cachedArgs = args[excludeFirst:]
+            f.cachedRes = f(*args)
+            print('cached!')
+        return f.cachedRes
+    return wrapper
 
 
 
