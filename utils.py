@@ -396,11 +396,22 @@ def memoLastPosArgs(f):
         if args[excludeFirst:] != f.cachedArgs:
             f.cachedArgs = args[excludeFirst:]
             f.cachedRes = f(*args)
-            print('cached!')
         return f.cachedRes
     return wrapper
 
 
+class Dummy:
+    """ Void mock class returning itself on every attr access
+        Use to avoid attribute/name errors with no if-checks
+        Evaluates to False on logical operations """
+
+    def __init__(self, *args, **kwargs): pass
+
+    def __getattr__(self, item): return self
+
+    def __call__(self, *args, **kwargs): return self
+
+    def __bool__(self): return False
 
 
 
