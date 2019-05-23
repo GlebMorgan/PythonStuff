@@ -1,2 +1,2 @@
 from .ActionButton import ActionButton
-from .ActionComboBox import ActionComboBox
+from .ActionComboBox import ActionComboBox, ValidatingComboBox
