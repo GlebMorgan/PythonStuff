@@ -21,5 +21,5 @@ class ActionButton(QPushButton):
         self.setToolTip(self.targetAction.toolTip())
         self.setIcon(self.targetAction.icon())
         self.setEnabled(self.targetAction.isEnabled())
-        self.setCheckable(self.targetAction.isChself.targetActioneckable())
+        self.setCheckable(self.targetAction.isCheckable())
         self.setChecked(self.targetAction.isChecked())

@@ -414,18 +414,30 @@ class Dummy:
     def __bool__(self): return False
 
 
+class isiterableMeta(type):
+    def __getitem__(cls, item):
+        if not isinstance(item, type):
+            raise TypeError("Iterated type should be placed in square brackets")
+        else: cls.type = item
+        return cls()
+class isiterable(metaclass=isiterableMeta):
+    def __call__(self, object):
+        try: iterator = iter(object)
+        except TypeError: return False
+        else: return True if isinstance(next(iterator), self.type) else False
+
 
 if __name__ == '__main__':
-    CHECK_ITEM = ...
+    CHECK_ITEM = isiterable
 
-    if (CHECK_ITEM == InternalNameShadingVerifier):
+    if CHECK_ITEM == InternalNameShadingVerifier:
         shver = InternalNameShadingVerifier(internals=False)
         # print(shver.reservedNames)
         print(shver.isReserved("c"))
         print(shver.showShadowedModules("c"))
         print(shver.showShadowedNames('c'))
 
-    if (CHECK_ITEM == bytewise):
+    if CHECK_ITEM == bytewise:
         print(f"b'' - {bytewise(b'')}")
         print(f"None - {bytewise(None)}")
         print(f"Bytes - {bytewise(b'ABCDEFGHIJKLMNO')}")
@@ -435,7 +447,7 @@ if __name__ == '__main__':
         print(f"two bytes - {bytewise(b'fc')}")
         # print(f"Looong bytes - {bytewise(bytes.fromhex('00'*10_000_000))}")
 
-    if (CHECK_ITEM == bytewise_format):
+    if CHECK_ITEM == bytewise_format:
         with Timer("iter"):
             print(f"Looong bytes - "
                   f"{bytewise(bytes.fromhex(''.join([i.to_bytes(2, 'big').hex() for i in range(65_535)])))}")
@@ -443,11 +455,11 @@ if __name__ == '__main__':
             print(f"Looong bytes - "
                   f"{bytewise_format(bytes.fromhex(''.join([i.to_bytes(2, 'big').hex() for i in range(65_535)])))}")
 
-    if (CHECK_ITEM == bitwise):
+    if CHECK_ITEM == bitwise:
         print(bitwise(b'FGRb'))
         print(f"{int.from_bytes(b'FGRb', 'big'):032b}")
 
-    if (CHECK_ITEM == legacy):
+    if CHECK_ITEM == legacy:
         class A:
             a = "new_a"
             print("##")
@@ -467,7 +479,7 @@ if __name__ == '__main__':
         fun()
         print(fun.legacy)
 
-    if (CHECK_ITEM == inject_slots):
+    if CHECK_ITEM == inject_slots:
         class TestInjetSlots:
             __slots__ = ('a', 'b', 'c', 'd')
 
@@ -478,7 +490,7 @@ if __name__ == '__main__':
         t = TestInjetSlots('avar', 'bvar')
         print(*(t.a, t.b, t.c, t.d))
 
-    if (CHECK_ITEM == inject_args):
+    if CHECK_ITEM == inject_args:
         class TestInjetArgs:
             @inject_args
             def __init__(self, a, b, c=4, d=8): print("finished __init__")
@@ -486,3 +498,11 @@ if __name__ == '__main__':
 
         t = TestInjetArgs('avar', 'bvar')
         print(*(t.a, t.b, t.c, t.d))
+
+    if CHECK_ITEM == isiterable:
+        print(isiterable[str]('value'))
+        print(isiterable[str](['a','g','t']))
+        print(isiterable[int]({1:'a', 2:'t'}))
+        print(isiterable[int]('wrong'))
+        print(isiterable[int](0))
+

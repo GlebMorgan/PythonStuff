@@ -53,6 +53,7 @@ def split(): NotImplemented
 
 
 def extract(val, frombit=None, tobit=0):
+    # TODO: define range in a symbol mask way
     """
     Extract number from 'val' based on provided limits [frombit..tobit], both inclusive
     Ex: extract(0b001_110_10, 2, 4) == 0b110
