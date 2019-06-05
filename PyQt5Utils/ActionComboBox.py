@@ -73,6 +73,11 @@ class ValidatingComboBox(ActionComboBox):
         BackgroundNormal = 'white'
         BackgroundRed = 'red'
 
+    class PersistInputMode(Enum):
+        Persist = 1
+        Clear = 2
+        Retain = 3
+
     ValidatorColorsMapping = {
         QRegExpValidator.Invalid: DisplayColor.Red,
         QRegExpValidator.Intermediate: DisplayColor.Blue,
@@ -80,8 +85,10 @@ class ValidatingComboBox(ActionComboBox):
         None: DisplayColor.Black
     }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, persistInput=PersistInputMode.Retain, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.persistInvalidInput = persistInput
+        self.lastInput = None
 
     def setValidator(self, validator):
         super().setValidator(validator)
@@ -103,14 +110,22 @@ class ValidatingComboBox(ActionComboBox):
 
     def focusInEvent(self, QFocusEvent):
         super().focusInEvent(QFocusEvent)
+        if self.persistInvalidInput is self.PersistInputMode.Retain:
+            if self.lastInput: self.setCurrentText(self.lastInput)
         self.changeTextColor(self.validator().state)
 
     def focusOutEvent(self, QFocusEvent):
         # TODO: Add optional functionality to display current chosen value (valid) if current displayed value is invalid
         #       store current displayed value and restore it on next focusInEvent
         #       if option is chosen, get rid of changing color to black on focusOutEvent
+
         super().focusOutEvent(QFocusEvent)
-        if self.palette().color(QPalette.Text) == QColor(self.DisplayColor.Green.value):
+        self.lastInput = self.currentText()
+        if self.persistInvalidInput is self.PersistInputMode.Persist:
+            if self.palette().color(QPalette.Text) == QColor(self.DisplayColor.Green.value):
+                self.setColor(QPalette.Text, self.DisplayColor.Black)
+        else:
+            self.setCurrentText(self.itemText(self.currentIndex()))
             self.setColor(QPalette.Text, self.DisplayColor.Black)
 
     def setColor(self, role: QPalette.ColorRole, color: Union[DisplayColor, QColor]):
