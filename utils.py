@@ -427,6 +427,19 @@ class isiterable(metaclass=isiterableMeta):
         else: return True if isinstance(next(iterator), self.type) else False
 
 
+def threaded(f):
+    """ Decorator to run function in new thread """
+
+    from threading import Thread
+
+    @wraps(f)
+    def runThreaded(*args, **kwargs):
+        thread = Thread(name=f"Threaded: {f.__name__}", target=f, args=args, kwargs=kwargs)
+        thread.start()
+        return thread
+    return runThreaded
+
+
 if __name__ == '__main__':
     CHECK_ITEM = isiterable
 

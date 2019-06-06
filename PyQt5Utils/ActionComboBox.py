@@ -29,11 +29,14 @@ class NotifyingValidator(QRegExpValidator):
     validationStateChanged = pyqtSignal(QRegExpValidator.State)
 
 
-
 class ActionComboBox(QComboBox):
-    def __init__(self, *args, syncText=False, **kwargs):
+
+    updateRequired = pyqtSignal()
+
+    def __init__(self, *args, syncActionText=False, **kwargs):
         super().__init__(*args, **kwargs)
-        self.syncText = syncText
+        self.activeValue = ''
+        self.syncText = syncActionText
         self.targetAction = None
 
         self.setModel(QStringListModel())
@@ -43,8 +46,9 @@ class ActionComboBox(QComboBox):
     def setAction(self, action):
         self.targetAction = action
         self.targetAction.changed.connect(self.updateFromAction)
-        self.currentIndexChanged.connect(self.triggerActionWithData)
+        self.currentIndexChanged.connect(self.triggerAction)
         self.updateFromAction()
+        QTimer().singleShot(0, self.triggerAction)
 
     def updateFromAction(self):
         if self.syncText: self.setText(self.targetAction.text())
@@ -52,17 +56,36 @@ class ActionComboBox(QComboBox):
         self.setToolTip(self.targetAction.toolTip())
         self.setEnabled(self.targetAction.isEnabled())
 
-    def triggerActionWithData(self):
-        self.targetAction.setData(self.currentIndex())
-        self.targetAction.trigger()
-        print(f"New state: {self.currentText()}")
+    def triggerAction(self):
+        if self.view().hasFocus():
+            return self.restoreCurrentIndex()
+        # CONSIDER: ▼ will this still be needed in the end? :)
+        # if self.currentIndex() == -1: return
+        self.updateRequired.emit()
+        if self.currentText() != self.activeValue:
+            self.activeValue = self.currentText()
+            self.targetAction.trigger()
+        print(f"New state: {self.currentText()}, sender: {self.sender().__class__.__name__}")
 
     def focusInEvent(self, QFocusEvent):
         super().focusInEvent(QFocusEvent)
+        self.updateRequired.emit()
         QTimer().singleShot(0, self.lineEdit().selectAll)
 
+    def focusOutEvent(self, QFocusEvent):
+        if not self.view().hasFocus():
+            super().focusOutEvent(QFocusEvent)
+
+    def restoreCurrentIndex(self):
+        self.blockSignals(True)
+        self.setCurrentIndex(self.findText(self.activeValue))
+        self.blockSignals(False)
 
 class ValidatingComboBox(ActionComboBox):
+
+    # TODO: dont mess things up on drop-down
+
+    # TODO: Move coloring routine to dedicated class
 
     class DisplayColor(Enum):
         Normal = 'black'
@@ -102,30 +125,30 @@ class ValidatingComboBox(ActionComboBox):
         #         lambda state: self.testAfterValidate(state)
         # )
 
-    def triggerActionWithData(self):
-        if self.validator().state == self.validator().Acceptable:
-            self.changeTextColor(None)
-            self.blink(self.DisplayColor.Green)
-        super().triggerActionWithData()
+    def triggerAction(self):
+        # self.changeTextColor(None)
+        # self.blink(self.DisplayColor.Green)
+        # self.lastInput = self.currentText()
+        super().triggerAction()
 
     def focusInEvent(self, QFocusEvent):
         super().focusInEvent(QFocusEvent)
         if self.persistInvalidInput is self.PersistInputMode.Retain:
-            if self.lastInput: self.setCurrentText(self.lastInput)
+            if self.lastInput:
+                self.setCurrentText(self.lastInput)
+            if self.lastInput != self.activeValue:
+                QTimer().singleShot(0, self.lineEdit().deselect)
+            print(f"LastInput: {self.lastInput}, activeValue: {self.activeValue}, currentText: {self.currentText()}")
         self.changeTextColor(self.validator().state)
 
     def focusOutEvent(self, QFocusEvent):
-        # TODO: Add optional functionality to display current chosen value (valid) if current displayed value is invalid
-        #       store current displayed value and restore it on next focusInEvent
-        #       if option is chosen, get rid of changing color to black on focusOutEvent
-
         super().focusOutEvent(QFocusEvent)
         self.lastInput = self.currentText()
         if self.persistInvalidInput is self.PersistInputMode.Persist:
             if self.palette().color(QPalette.Text) == QColor(self.DisplayColor.Green.value):
                 self.setColor(QPalette.Text, self.DisplayColor.Black)
         else:
-            self.setCurrentText(self.itemText(self.currentIndex()))
+            self.setCurrentText(self.activeValue)
             self.setColor(QPalette.Text, self.DisplayColor.Black)
 
     def setColor(self, role: QPalette.ColorRole, color: Union[DisplayColor, QColor]):
@@ -135,6 +158,7 @@ class ValidatingComboBox(ActionComboBox):
         self.setPalette(palette)
 
     def changeTextColor(self, state):
+        # FIXME: color should reflect state of actual text in textInput, not validation state of last keypress
         if state == self.validator().Acceptable:
             text = self.lineEdit().text()
             items = self.model().stringList()
@@ -159,3 +183,11 @@ class ValidatingComboBox(ActionComboBox):
         palette.setColor(QPalette.Base, QColor(choice(('orange', 'aqua', 'khaki', 'magenta', 'aquamarine', 'lime'))))
         self.setPalette(palette)
         print(self.lineEdit().palette().color(QPalette.WindowText).name())
+
+    def ack(self, ack=True):
+        self.changeTextColor(None)
+        if ack is True:
+            self.blink(self.DisplayColor.Green)
+            self.lastInput = self.currentText()
+        elif ack is False:
+            self.blink(self.DisplayColor.Red)
