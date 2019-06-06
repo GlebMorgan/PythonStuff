@@ -1,8 +1,12 @@
+from __future__ import annotations
 from PyQt5.QtCore import QStringListModel, QTimer, pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QValidator, QRegExpValidator, QPalette, QColor
-from PyQt5.QtWidgets import QAction, QComboBox
+from PyQt5.QtWidgets import QAction, QComboBox, QWidget
 from enum import Enum
-from typing import Union, Sequence
+from typing import Union, Sequence, NamedTuple
+
+from utils import Dummy
+
 
 class NotifyingValidator(QRegExpValidator):
 
@@ -29,6 +33,87 @@ class NotifyingValidator(QRegExpValidator):
     validationStateChanged = pyqtSignal(QRegExpValidator.State)
 
 
+class Colorer():
+
+    """ Supposed to be subclassed and override colorize() method
+        Default behaviour - colorize based on target.validator().state property """
+
+    # changeTextColor() on:
+    #   validator.triggered
+    #   focusInEvent()
+    #   focusOutEvent() when coloring is removed
+    #   ack()
+
+    # Needs to change on:
+    #   setCurrentText()                 -> needs testing
+    #   validator().triggered            -> ???
+    #   focusInEvent(), focusOutEvent()  -> call manually
+    #   ack()                            -> call manually
+
+    class DisplayColor(Enum):
+        Normal = 'black'
+        Red = 'red'
+        Green = 'forestgreen'
+        Blue = 'mediumblue'
+        Black = 'black'
+        BackgroundNormal = 'white'
+        BackgroundRed = 'red'
+
+    ValidatorColorsMapping = {
+        QRegExpValidator.Invalid: DisplayColor.Red,
+        QRegExpValidator.Intermediate: DisplayColor.Blue,
+        QRegExpValidator.Acceptable: DisplayColor.Green,
+        None: DisplayColor.Black
+    }
+
+    class ColorSetting(NamedTuple):
+        colorRole: QPalette.ColorRole
+        color: Colorer.DisplayColor
+
+    def __init__(self, target:QWidget):
+        self.target = target
+        if not isinstance(self.target, QWidget):
+            raise TypeError(f"'target' parameter type is incorrect: expected 'QWidget', got {type(self.target)}")
+        # if not isinstance(self.target.validator(), QValidator):
+        #     raise TypeError(f"Target widget should have validator assigned")
+        # if not hasattr(self.target.validator(), 'state') or not hasattr(self.target.validator(), 'triggered'):
+        #     raise TypeError("Target widget validator should have 'state' parameter containing current validation state "
+        #                     "and emit 'triggered' signal when validation is performed")
+        # self.target.validator().triggered.connect(self.setColor(self.colorize()))
+        if hasattr(self.target, 'currentTextChanged'):
+            self.target.currentTextChanged.connect(self.updateColor)
+        elif hasattr(self.target, 'textChanged'):
+            self.target.textChanged.connect(self.updateColor)
+        self.blinking = False
+
+    def updateColor(self):
+        self.setColor(*self.colorize())
+
+    def colorize(self) -> ColorSetting:
+        return self.ColorSetting(QPalette.Text, self.ValidatorColorsMapping[self.target.validator().state])
+
+    def setColor(self, role: QPalette.ColorRole, color: Union[DisplayColor, QColor]):
+        palette = self.target.palette()
+        if isinstance(color, self.DisplayColor): color = color.value
+        palette.setColor(role, QColor(color))
+        self.target.setPalette(palette)
+
+    def blink(self, color: DisplayColor):
+        if self.blinking: return
+        else: self.blinking = True
+        currColor = self.target.palette().color(QPalette.Text)
+        self.setColor(QPalette.Text, self.DisplayColor.Normal)
+        self.setColor(QPalette.Base, color)
+        QTimer().singleShot(100, lambda: self.unblink(currColor))
+
+    def unblink(self, oldColor):
+        self.setColor(QPalette.Text, oldColor)
+        self.setColor(QPalette.Base, self.DisplayColor.BackgroundNormal)
+        QTimer().singleShot(50, lambda: setattr(self, 'blinking', False))
+
+
+# FIXME: on startup, color is not set to black
+
 class ActionComboBox(QComboBox):
 
     updateRequired = pyqtSignal()
@@ -38,6 +123,7 @@ class ActionComboBox(QComboBox):
         self.activeValue = ''
         self.syncText = syncActionText
         self.targetAction = None
+        self.colorer = Dummy()
 
         self.setModel(QStringListModel())
         self.setEditable(True)
@@ -49,6 +135,9 @@ class ActionComboBox(QComboBox):
         self.currentIndexChanged.connect(self.triggerAction)
         self.updateFromAction()
         QTimer().singleShot(0, self.triggerAction)
+
+    def setColorer(self, colorer:Colorer):
+        self.colorer = colorer
 
     def updateFromAction(self):
         if self.syncText: self.setText(self.targetAction.text())
@@ -87,26 +176,10 @@ class ValidatingComboBox(ActionComboBox):
 
     # TODO: Move coloring routine to dedicated class
 
-    class DisplayColor(Enum):
-        Normal = 'black'
-        Red = 'red'
-        Green = 'forestgreen'
-        Blue = 'mediumblue'
-        Black = 'black'
-        BackgroundNormal = 'white'
-        BackgroundRed = 'red'
-
     class PersistInputMode(Enum):
         Persist = 1
         Clear = 2
         Retain = 3
-
-    ValidatorColorsMapping = {
-        QRegExpValidator.Invalid: DisplayColor.Red,
-        QRegExpValidator.Intermediate: DisplayColor.Blue,
-        QRegExpValidator.Acceptable: DisplayColor.Green,
-        None: DisplayColor.Black
-    }
 
     def __init__(self, persistInput=PersistInputMode.Retain, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -116,18 +189,16 @@ class ValidatingComboBox(ActionComboBox):
     def setValidator(self, validator):
         super().setValidator(validator)
         validator.triggered.connect(
-                lambda state: self.changeTextColor(state)
-        )
-        validator.triggered.connect(
-                lambda state: self.blink(self.DisplayColor.Red) if state == self.validator().Invalid else None
+                lambda state: self.colorer.blink(self.colorer.DisplayColor.Red) if state == self.validator().Invalid else None
         )
         # validator.triggered.connect(
-        #         lambda state: self.testAfterValidate(state)
+        #         lambda state: self.testColorizeRandomly(state)
         # )
 
+    # TODO: get back triggerActionWithData!
     def triggerAction(self):
         # self.changeTextColor(None)
-        # self.blink(self.DisplayColor.Green)
+        # self.blink(self.colorer.DisplayColor.Green)
         # self.lastInput = self.currentText()
         super().triggerAction()
 
@@ -139,45 +210,20 @@ class ValidatingComboBox(ActionComboBox):
             if self.lastInput != self.activeValue:
                 QTimer().singleShot(0, self.lineEdit().deselect)
             print(f"LastInput: {self.lastInput}, activeValue: {self.activeValue}, currentText: {self.currentText()}")
-        self.changeTextColor(self.validator().state)
+        self.colorer.updateColor()
 
     def focusOutEvent(self, QFocusEvent):
         super().focusOutEvent(QFocusEvent)
         self.lastInput = self.currentText()
         if self.persistInvalidInput is self.PersistInputMode.Persist:
-            if self.palette().color(QPalette.Text) == QColor(self.DisplayColor.Green.value):
-                self.setColor(QPalette.Text, self.DisplayColor.Black)
+            if self.palette().color(QPalette.Text) == QColor(self.colorer.DisplayColor.Green.value):
+                self.colorer.setColor(QPalette.Text, self.colorer.DisplayColor.Black)
         else:
             self.setCurrentText(self.activeValue)
-            self.setColor(QPalette.Text, self.DisplayColor.Black)
+            self.colorer.setColor(QPalette.Text, self.colorer.DisplayColor.Black)
 
-    def setColor(self, role: QPalette.ColorRole, color: Union[DisplayColor, QColor]):
-        palette = self.palette()
-        if isinstance(color, self.DisplayColor): color = color.value
-        palette.setColor(role, QColor(color))
-        self.setPalette(palette)
-
-    def changeTextColor(self, state):
-        # FIXME: color should reflect state of actual text in textInput, not validation state of last keypress
-        if state == self.validator().Acceptable:
-            text = self.lineEdit().text()
-            items = self.model().stringList()
-            if text not in items:
-                if any(item.startswith(text) for item in items):
-                    state = self.validator().Intermediate
-                else:
-                    state = self.validator().Invalid
-        self.setColor(QPalette.Text, self.ValidatorColorsMapping[state])
-
-    def blink(self, color: DisplayColor):
-        if self.palette().color(QPalette.Base) == QColor(color.value): return
-        currColor = self.palette().color(QPalette.Text)
-        self.setColor(QPalette.Text, self.DisplayColor.Normal)
-        self.setColor(QPalette.Base, color)
-        QTimer().singleShot(100, lambda: self.setColor(QPalette.Text, currColor))
-        QTimer().singleShot(100, lambda: self.setColor(QPalette.Base, self.DisplayColor.BackgroundNormal))
-
-    def testAfterValidate(self, state):
+    # TODO: remove this test function when finished class
+    def testColorizeRandomly(self):
         from random import choice
         palette = self.palette()
         palette.setColor(QPalette.Base, QColor(choice(('orange', 'aqua', 'khaki', 'magenta', 'aquamarine', 'lime'))))
@@ -185,9 +231,9 @@ class ValidatingComboBox(ActionComboBox):
         print(self.lineEdit().palette().color(QPalette.WindowText).name())
 
     def ack(self, ack=True):
-        self.changeTextColor(None)
+        self.colorer.setColor(QPalette.Text, self.colorer.DisplayColor.Black)
         if ack is True:
-            self.blink(self.DisplayColor.Green)
+            self.colorer.blink(self.colorer.DisplayColor.Green)
             self.lastInput = self.currentText()
         elif ack is False:
-            self.blink(self.DisplayColor.Red)
+            self.colorer.blink(self.colorer.DisplayColor.Red)
