@@ -1,4 +1,8 @@
 class Context():
+    """ Context manager to shorten object references in code
+        WARNING: do NOT use assignments to returned reference
+            within with() statement! """
+
     def __init__(self, currObj):
         self._obj = currObj
         # object.__setattr__(self, 'obj', currObj)
@@ -11,6 +15,13 @@ class Context():
 
     def __exit__(self, type, value, traceback):
         pass
+
+    def __bool__(self):
+        return bool(self._obj)
+
+    # CONSIDER: add basic internally-called function overrides here
+    #           (like __iter__, __len__, ...)
+
 
 if __name__ == '__main__':
     class B():
