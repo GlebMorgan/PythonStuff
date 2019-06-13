@@ -1,14 +1,23 @@
 from __future__ import annotations
+
+from typing import Union
+
 from PyQt5.QtCore import QStringListModel, QTimer, pyqtSignal
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtWidgets import QComboBox
 from enum import Enum
 
 from PyQt5Utils.Colorer import Colorer
+from logger import Logger
 from utils import Dummy
 
 
+log = Logger("ActionComboBox")
+
+
 class ActionComboBox(QComboBox):
+
+    # TODO: docs and API method arguments/return_values type annotations
 
     updateRequired = pyqtSignal()
 
@@ -39,18 +48,17 @@ class ActionComboBox(QComboBox):
         self.setEnabled(self.targetAction.isEnabled())
 
     def triggerActionWithData(self):
-        print(f"Action '{self.targetAction.text()}' triggered!")
+        log.debug(f"Action '{self.targetAction.text()}' triggered!")
         if self.view().hasFocus():
             return self.restoreCurrentIndex()
         if self.currentIndex() == -1: return
         if self.currentText() != self.activeValue:
             self.targetAction.setData(self.currentText())
             self.targetAction.trigger()
-        print(f"New state: {self.currentText()}, sender: {self.sender().__class__.__name__}")
+        log.debug(f"New state: {self.currentText()}, sender: {self.sender().__class__.__name__}")
 
     def focusInEvent(self, QFocusEvent):
         super().focusInEvent(QFocusEvent)
-        print('Focus!')
         self.updateRequired.emit()
         QTimer().singleShot(0, self.lineEdit().selectAll)
 
@@ -66,18 +74,18 @@ class ActionComboBox(QComboBox):
 
 class ValidatingComboBox(ActionComboBox):
 
-    class PersistInputMode(Enum):
+    class InputMode(Enum):
         Persist = 1
         Clear = 2
         Retain = 3
 
-    def __init__(self, persistInput=PersistInputMode.Retain, *args, **kwargs):
+    def __init__(self, persistInput=InputMode.Retain, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.persistInvalidInput = persistInput
         self.lastInput = None
         self.colorer = Dummy()
 
-    def setColorer(self, colorer: Colorer =True):
+    def setColorer(self, colorer: Union[Colorer, bool] = True):
         if colorer is True: self.colorer = Colorer(self)
         elif colorer: self.colorer = colorer
         else: self.colorer = Dummy()
@@ -95,12 +103,12 @@ class ValidatingComboBox(ActionComboBox):
 
     def focusInEvent(self, QFocusEvent):
         super().focusInEvent(QFocusEvent)
-        if self.persistInvalidInput is self.PersistInputMode.Retain:
+        if self.persistInvalidInput is self.InputMode.Retain:
             if self.lastInput:
                 self.setCurrentText(self.lastInput)
             if self.lastInput != self.activeValue:
                 QTimer().singleShot(0, self.lineEdit().deselect)
-            print(f"LastInput: {self.lastInput}, activeValue: {self.activeValue}, currentText: {self.currentText()}")
+            log.debug(f"LastInput: {self.lastInput}, activeValue: {self.activeValue}, currentText: {self.currentText()}")
         self.colorer.updateColor()
 
     def focusOutEvent(self, QFocusEvent):
@@ -108,7 +116,7 @@ class ValidatingComboBox(ActionComboBox):
         if self.view().hasFocus():
             self.colorer.setColor(QPalette.Text, self.colorer.DisplayColor.Black)
         self.lastInput = self.currentText()
-        if self.persistInvalidInput is self.PersistInputMode.Persist:
+        if self.persistInvalidInput is self.InputMode.Persist:
             if self.currentText() == self.activeValue:
                 self.colorer.setColor(QPalette.Text, self.colorer.DisplayColor.Black)
         else:
@@ -121,7 +129,7 @@ class ValidatingComboBox(ActionComboBox):
         palette = self.palette()
         palette.setColor(QPalette.Base, QColor(choice(('orange', 'aqua', 'khaki', 'magenta', 'aquamarine', 'lime'))))
         self.setPalette(palette)
-        print(self.lineEdit().palette().color(QPalette.WindowText).name())
+        log.debug(self.lineEdit().palette().color(QPalette.WindowText).name())
 
     def ack(self, ack=True):
         self.activeValue = self.currentText()
