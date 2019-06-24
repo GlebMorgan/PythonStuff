@@ -368,6 +368,10 @@ def formatDict(d: dict, indent=4, level=0):
     return linesep.join(chain('{', iteritems(d), (' ' * indent * level + '}',)))
 
 
+def formatList(seq):
+    print(*seq, sep=linesep)
+
+
 def memo(f):
     """ Cache every no-side-effect function/method output
         Function arguments must be immutable

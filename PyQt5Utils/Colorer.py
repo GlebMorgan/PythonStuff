@@ -12,36 +12,14 @@ log = Logger("Colorer")
 
 
 class Colorer():
+    # TESTME: Use case with LineEdit
+
     """ Colorizes text on edits in ComboBoxes and LineEdits@needsTesting based on .colorize() method
         By default, color is based on validator state
-            (target_class.validator().state:QValidator.State attr should exist)
-        Alternative .colorize() behaviour could be provided by subclassing
+            (target_class.validator().state: QValidator.State attr should exist)
+            and is updated on text edits, though could be called whenever necessary
+        Customized .colorize() behaviour could be provided by subclassing
             or by providing colorizing function in Colorer() constructor.
-
-        API:
-
-        Colorer(target:QWidget, [colorize:Callable])
-            Initialize Colorer with target widget [ + 'colorize' override function, optionally]
-            QComboBox and QLineEdit (not tested!) is supported currently
-            If .colorize() function is not provided (whether by subclassing or as constructor parameter)
-                target widget should have custom .validator() assigned with .state:QValidator.State attr
-                representing current validation state
-            Else, .colorize() signature should conform to one of the following:
-                colorize_function(colorer_object) -> ColorSetting()
-                colorize_method(self, colorer_object) -> .ColorSetting()
-
-        .updateColor()
-            Update text color as defined by .colorize()
-            Triggered automatically on text edits, could be called manually when necessary
-
-        .setColor(role: QPalette.ColorRole, color: .DisplayColor)
-        .setColor(role: QPalette.ColorRole, color: QColor)
-        .setColor(ColorSetting)
-            Update target widget component 'role' (text, selection, background, etc.) with specified color 'color'
-
-        .blink(color: .DisplayColor):
-            Blink background with specified color for 100ms
-            Do not triggered automatically, intended to be called manually when necessary
     """
 
     class DisplayColor(Enum):
@@ -64,7 +42,13 @@ class Colorer():
         colorRole: QPalette.ColorRole
         color: Colorer.DisplayColor
 
-    def __init__(self, target: QWidget, colorize: Callable = None):
+    def __init__(self, target: QWidget, colorize: Callable[[Colorer], ColorSetting] = None):
+        """ Initialize Colorer with target widget [ + 'colorize' override function, optionally]
+            QComboBox and QLineEdit widgets are supported currently
+            If colorize() function is not provided (whether by subclassing or as constructor parameter)
+                target widget should have custom .validator() with .state: QValidator.State attr
+                representing current validation state
+        """
         self.target = target
         if hasattr(self.target, 'currentTextChanged'):
             self.target.currentTextChanged.connect(self.updateColor)
@@ -81,47 +65,59 @@ class Colorer():
         self.savedColor = None
 
     def updateColor(self):
+        """ Update text color as defined by .colorize()
+            Triggered automatically on text edits, could be called manually when necessary
+        """
         self.setColor(*self.colorize())
 
     def colorize(self) -> ColorSetting:
+        """ Default implementation, is based on .target.validator().state :QValidator.State attr.
+            Intended to be overridden for providing alternative behaviour
+        """
         if self.target.currentText() == self.target.activeValue:
             return self.ColorSetting(QPalette.Text, Colorer.DisplayColor.Black)
         return self.ColorSetting(QPalette.Text, self.ValidatorColorsMapping[self.target.validator().state])
 
     def setColor(self, role: QPalette.ColorRole, color: Union[DisplayColor, QColor]):
+        """ Update target widget component 'role' (text, selection, background, etc.)
+                with specified color 'color'. Use as .setColor(*.ColorSetting(role, color))
+        """
         palette = self.target.palette()
         if isinstance(color, self.DisplayColor): color = color.value
         palette.setColor(role, QColor(color))
         self.target.setPalette(palette)
 
     def blink(self, color: DisplayColor):
+        """ Blink background with specified color for 100ms
+            Is not triggered automatically, intended to be called manually when necessary
+        """
+        # FIXME: trouble with changing color while blinking!
         self.savedColor = self.target.palette().color(QPalette.Text)
         if not self.blinkingTimer:
-            log.debug(f'▲ ({color.name})')
+            # log.debug(f'▲ ({color.name})')
             self.blinkingTimer = QTimer(self.target)
             self.blinkingTimer.color = color
             self.blinkingTimer.setInterval(80)
             self.blinkingTimer.setSingleShot(True)
-            self.blinkingTimer.timeout.connect(lambda: self.unblink(self.savedColor))
+            self.blinkingTimer.timeout.connect(lambda: self._unblink_(self.savedColor))
             self.blinkingTimer.start()
         elif self.blinkingTimer.color != color:
-            log.debug(f'↺ ({color.name})')
+            # log.debug(f'↺ ({color.name})')
             self.blinkingTimer.color = color
             self.blinkingTimer.start()
         else: return
-        log.debug('☼')
+        # log.debug('☼')
         self.blinkingTimer.color = color
         self.setColor(QPalette.Text, self.DisplayColor.Normal)
         self.setColor(QPalette.Base, color)
 
-    def unblink(self, oldColor: Union[DisplayColor, QColor]):
-        log.debug(f"○ ({oldColor.name() if hasattr(oldColor.name, '__call__') else oldColor.name})")
+    def _unblink_(self, oldColor: Union[DisplayColor, QColor]):
+        # log.debug(f"○ ({oldColor.name() if hasattr(oldColor.name, '__call__') else oldColor.name})")
         self.setColor(QPalette.Text, oldColor)
         self.setColor(QPalette.Base, self.DisplayColor.BackgroundNormal)
-        QTimer().singleShot(20, self.test_clearBlinkingTimer)
+        QTimer().singleShot(20, lambda:
+                setattr(self, 'blinkingTimer', None) if not self.blinkingTimer.isActive() else None)
 
-    def test_clearBlinkingTimer(self):
-        log.debug('▼')
-        if self.blinkingTimer is None:
-            raise AssertionError("Colorer.blinkingTimer is set to None when it is already None")
+    def _test_clearBlinkingTimer_(self):
+        # log.debug('▼')
         setattr(self, 'blinkingTimer', None) if not self.blinkingTimer.isActive() else None
