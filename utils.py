@@ -10,6 +10,24 @@ from timer import Timer
 from typing import Union
 
 
+sampledict = {
+    1: 'a',
+    2: 'b',
+    'None': None,
+    'bool': True,
+    'str': 'blablabla',
+    'multilineStr': '1st str' + linesep + '2nd str',
+    'ellipsis': ...,
+    'list': [1, 2, 3, 4, 5, ('a', 'b', 'c'), ..., None],
+    'dict': {1: 'first', 2: 'second'},
+    'object': object,
+    'errorClass': RuntimeError,
+    'function': print,
+    'module': bits
+}
+sampledict['self'] = sampledict
+
+
 class InternalNameShadingVerifier():
 
     def __init__(self, docslibs=True, reallibs=True, builtins=True, keywords=True, internals=False):
@@ -346,7 +364,12 @@ def castStr(targetType: type, value: str) -> Union[None, str, int, float, bool]:
     raise ValueError(f"Cannot convert '{value}' to {targetType}")
 
 
-def formatDict(d: dict, indent=4, level=0):
+def trimDict(dct: dict, limit: int):
+    if len(dct) <= limit: return dct
+    return dict(list(dct.items())[:limit])
+
+
+def formatDict(d: dict, indent=4, level=0, limit=None):
     """ Return string representation of mapping in a following format:
         {
             <name1>: str(<value1>)
@@ -359,17 +382,22 @@ def formatDict(d: dict, indent=4, level=0):
             ...
         } """
 
-    def iteritems(dct):
+    def addIndent(s: str, lvl=1):
+        return indent * lvl + s
+
+    def iteritems(dct, trimmed=False):
         for name, value in dct.items():
             if value is dct: value = '<self>'
             elif isinstance(value, dict): value = formatDict(value, level=level+1)
-            yield f"{' '*indent*(level+1)}{name}: {str(value)}"
-
-    return linesep.join(chain('{', iteritems(d), (' ' * indent * level + '}',)))
+            yield f"{addIndent('', level+1)}{name}: {str(value)}"
+        if trimmed: yield addIndent('...')
+    indent = ' ' * indent
+    shortd = trimDict(d, limit) if limit else d
+    return linesep.join(chain('{', iteritems(shortd, trimmed = len(d) != len(shortd)), (addIndent('}', level),)))
 
 
 def formatList(seq):
-    print(*seq, sep=linesep)
+    return linesep.join(str(item) for item in seq)
 
 
 def memo(f):
@@ -458,8 +486,30 @@ def testCOMs(comSeq=(1, 2, 10, 11, 12, 13)):
         s.close()
 
 
+def listAttrs(obj, invoke=False, limit: int = None):
+    for a in dir(obj):
+        v = getattr(obj, a)
+
+        if hasattr(v, '__call__'):
+            try:
+                if invoke: v = v()
+                else: raise TypeError
+            except TypeError:
+                import inspect
+                try: v = f'{v.__name__}{inspect.signature(v)}'
+                except ValueError: v = v.__name__
+                except AttributeError: pass  # leave name as repr
+            a = f'{a}()'
+
+        if isinstance(v, dict): v = formatDict(v, limit=limit)
+        print(f"{a} = {v}", sep=linesep)
+
+
+# ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
+
+
 if __name__ == '__main__':
-    CHECK_ITEM = isiterable
+    CHECK_ITEM = formatDict
 
     if CHECK_ITEM == InternalNameShadingVerifier:
         shver = InternalNameShadingVerifier(internals=False)
@@ -536,4 +586,7 @@ if __name__ == '__main__':
         print(isiterable[int]({1:'a', 2:'t'}))
         print(isiterable[int]('wrong'))
         print(isiterable[int](0))
+
+    if CHECK_ITEM == formatDict:
+        print(formatDict(sampledict, limit=4))
 
