@@ -2,13 +2,11 @@ from contextlib import contextmanager
 from functools import wraps
 from itertools import chain
 from os import linesep
-from os.path import abspath, dirname
-
-import bits
-import stdlib_list
-from timer import Timer
 from typing import Union
 
+import stdlib_list
+
+from . import Timer, extract
 
 sampledict = {
     1: 'a',
@@ -23,7 +21,7 @@ sampledict = {
     'object': object,
     'errorClass': RuntimeError,
     'function': print,
-    'module': bits
+    'module': stdlib_list
 }
 sampledict['self'] = sampledict
 
@@ -152,7 +150,7 @@ def bitwise(bBytes):
     """
 
     return "  ".join(
-            f"{byte >> 4:04b} {bits.extract(byte, frombit=3):04b}" for byte in iter(bBytes)
+            f"{byte >> 4:04b} {extract(byte, frombit=3):04b}" for byte in iter(bBytes)
     ) if bBytes is not None else '<Void>'
 
 
@@ -254,7 +252,7 @@ def add_slots(oldclass):
 
 
 def store_value(name):
-    """ Decorator (to use with methods only!) to cach single-output result
+    """ Decorator (to use with methods only!) to cache single-output result
         Returns existing 'class.name' attr if one exists
         Otherwise computes and creates it first
     """
@@ -316,7 +314,7 @@ def alias(this: type): return this
 
 @contextmanager
 def this(ref):
-    """ Shorten long expressions to one name """
+    """ Context manager to shorten long expressions to one name """
     yield ref
 
 
@@ -335,7 +333,8 @@ def castStr(targetType: type, value: str) -> Union[None, str, int, float, bool]:
         ['False', 'No', '0', 'OFF'] —> False <bool>
         ['12', '0xC', '0b1100']     —> 12 <int>
         ['0.1', '1E-1', '1.00E-1']  —> 12 <int>
-        'any_str'                   —> 'any_str' <str> """
+        'any_str'                   —> 'any_str' <str>
+    """
 
     value = value.lower()
 
@@ -380,7 +379,8 @@ def formatDict(d: dict, indent=4, level=0, limit=None):
                 ...
             }
             ...
-        } """
+        }
+    """
 
     def addIndent(s: str, lvl=1):
         return indent * lvl + s
@@ -391,6 +391,7 @@ def formatDict(d: dict, indent=4, level=0, limit=None):
             elif isinstance(value, dict): value = formatDict(value, level=level+1)
             yield f"{addIndent('', level+1)}{name}: {str(value)}"
         if trimmed: yield addIndent('...')
+
     indent = ' ' * indent
     shortd = trimDict(d, limit) if limit else d
     return linesep.join(chain('{', iteritems(shortd, trimmed = len(d) != len(shortd)), (addIndent('}', level),)))

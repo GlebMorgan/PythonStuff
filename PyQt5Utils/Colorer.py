@@ -6,7 +6,7 @@ from typing import NamedTuple, Union, Callable
 from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QRegExpValidator, QPalette, QColor
 from PyQt5.QtWidgets import QWidget
-from logger import Logger
+from Utils import Logger
 
 log = Logger("Colorer")
 

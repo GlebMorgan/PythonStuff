@@ -8,10 +8,9 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import QComboBox, QLineEdit, QAction
 from PyQt5.QtWidgets import QWidget
-from PyQt5Utils.Colorer import Colorer
-from logger import Logger
-from utils import Dummy
+from Utils import Logger, Dummy
 
+from . import Colorer
 
 log = Logger("ExtendedWidgetsBase")
 
