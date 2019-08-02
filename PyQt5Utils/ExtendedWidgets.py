@@ -5,7 +5,7 @@ from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtWidgets import QComboBox, QPushButton, QLineEdit, QVBoxLayout, QMessageBox
 from Utils import Logger
 
-from . import Colorer
+from .Colorer import Colorer
 from .ExtendedWidgetsBase import ActionWidget, ColoredWidget
 
 log = Logger("ActionWidget")

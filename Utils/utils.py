@@ -3,10 +3,11 @@ from functools import wraps
 from itertools import chain
 from os import linesep
 from typing import Union
+from time import time
 
 import stdlib_list
 
-from . import Timer, extract
+from .bits import extract
 
 sampledict = {
     1: 'a',
@@ -25,6 +26,29 @@ sampledict = {
 }
 sampledict['self'] = sampledict
 
+
+class Timer:
+
+    def __init__(self, name=None):
+        self.name = name
+        self.tstart = None
+        self.running = False
+
+    def __enter__(self):
+        self.start()
+
+    def __exit__(self, errtype, value, traceback):
+        self.stop()
+
+    def start(self):
+        if not self.running:
+            self.running = True
+            self.tstart = time()
+
+    def stop(self):
+        if self.running:
+            self.running = False
+            print(f"[{self.name or 'Timer'}] duration: {time() - self.tstart}")
 
 class InternalNameShadingVerifier():
 

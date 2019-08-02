@@ -3,7 +3,8 @@ import sys
 import traceback
 from os import linesep
 
-from . import ColorHandler, bytewise
+from .colored_logger import ColorHandler
+from .utils import bytewise
 
 
 C = CRITICAL = FATAL = logging.CRITICAL
