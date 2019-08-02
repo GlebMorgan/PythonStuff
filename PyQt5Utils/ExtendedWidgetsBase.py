@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import QComboBox, QLineEdit, QAction
 from PyQt5.QtWidgets import QWidget
 from Utils import Logger, Dummy
 
-from . import Colorer
+from .Colorer import Colorer
 
 log = Logger("ExtendedWidgetsBase")
 
