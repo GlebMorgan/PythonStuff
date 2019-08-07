@@ -1,9 +1,12 @@
 from __future__ import annotations as annotations_feature
 
+from itertools import chain, groupby
+from operator import itemgetter
 from sys import getsizeof as size
 from typing import ClassVar, Tuple, Optional
-from Utils import VoidDict, formatDict, legacy
-from itertools import chain, groupby
+
+from Utils import VoidDict, formatDict, legacy, attachItem
+
 
 # TODO: Add option to auto-init empty class variables (like 'd: ClassVar[str]') with None
 # TODO: document all this stuff!
@@ -12,7 +15,7 @@ from itertools import chain, groupby
 
 
 @legacy
-class ClearAnnotationsMeta(type):
+class ClearAnnotationsType(type):
 
     def __new__(metacls, clsname, bases, clsdict, **kwargs):
         annotations = getAnnotations(clsdict)
@@ -24,7 +27,7 @@ class ClearAnnotationsMeta(type):
 
 
 @legacy
-class TaggedAttrsInAnnotationsMeta(ClearAnnotationsMeta):  # NOTE: not working, see comment below
+class TaggedAttrsInAnnotationsType(ClearAnnotationsType):  # NOTE: not working, see comment below
 
     def __new__(metacls, clsname, bases, clsdict, tagging: str = 'after annotation', **kwargs):
         if tagging != 'after annotation':
@@ -85,7 +88,7 @@ class ClassModifier(type):
         return super().__new__(cls, *args)
 
 
-class TagMeta(type):
+class TagType(type):
     _instance_ = None
 
     def __new__(metacls, clsname, bases, clsdict, **kwargs):
@@ -103,7 +106,7 @@ class TagMeta(type):
         return cls._instance_
 
 
-class TAG(dict, metaclass=TagMeta):
+class TAG(dict, metaclass=TagType):
 
     def __new__(cls, *attrs):
         raise RuntimeError(f"Class {cls.__name__} is not intended be instantiated!")
@@ -132,7 +135,7 @@ class ClsdictTagNestedProxy(dict):
         self['__tags__'][tagname] = tuple(taggedList)
 
 
-class InjectedSlotsMeta(ClassModifier):
+class InjectedSlotsType(ClassModifier):
 
     def __new__(metacls, clsname, bases, clsdict, **kwargs):
         if not kwargs.get('baseClass'):
@@ -148,7 +151,8 @@ class InjectedSlotsMeta(ClassModifier):
                 else: del clsdict[attr]
             if defaults:
                 # ▼ if subclassed from class of this metaclass => subclassed from InjectedSlots
-                if bases and type(bases[0]) is metacls: clsdict['_defaults_'] = defaults
+                if bases and type(bases[0]) is metacls:
+                    clsdict['_defaults_'] = metacls.collectDefaults(bases, defaults)
                 else:
                     # ▼ InjectedSlots.__new__ should initialize defaults
                     raise CodeDesignError(f"In '{clsname}' class signature: {metacls.__name__} metaclass "
@@ -157,8 +161,18 @@ class InjectedSlotsMeta(ClassModifier):
             clsdict['__slots__'] = tuple(slots)
         return super().__new__(metacls, clsname, bases, clsdict)
 
+    @staticmethod
+    def collectDefaults(bases, currentDefaults):
+        dicts = attachItem(
+                iterable=filter(None, (parent.__dict__.get('_defaults_') for parent in reversed(bases))),
+                append=currentDefaults
+        )
+        newDefaults = dicts.__next__()
+        for defaults in dicts: newDefaults.update(defaults)
+        return newDefaults
 
-class InjectedSlots(metaclass=InjectedSlotsMeta, baseClass=True):
+
+class InjectedSlots(metaclass=InjectedSlotsType, baseClass=True):
     __slots__ = ()
 
     def __new__(cls, *args, **kwargs):
@@ -173,7 +187,7 @@ class InjectedSlots(metaclass=InjectedSlotsMeta, baseClass=True):
         return instance
 
 
-class TaggedAttrsNestedMeta(ClassModifier):
+class TaggedAttrsNestedType(ClassModifier):
 
     @classmethod
     def __prepare__(metacls, name, bases, baseClass=False):
@@ -186,7 +200,7 @@ class TaggedAttrsNestedMeta(ClassModifier):
         super().__new__(metacls, clsname, bases, dict(clsdict))
 
 
-class TaggedAttrsNested(metaclass=TaggedAttrsNestedMeta, baseClass=True):
+class TaggedAttrsNested(metaclass=TaggedAttrsNestedType, baseClass=True):
     __slots__ = ()
 
 
@@ -226,7 +240,7 @@ class ClsdictTagTitledProxy(dict):
         self.tags[self.currentTag] = []
 
 
-class TaggedAttrsTitledMeta(ClassModifier):
+class TaggedAttrsTitledType(ClassModifier):
 
     @classmethod
     def __prepare__(metacls, name, bases, baseClass=False):
@@ -239,11 +253,12 @@ class TaggedAttrsTitledMeta(ClassModifier):
         if hasattr(clsdict, 'tags'):
             # ▼ Collect all base class tag dicts + current class tag dict
             tagDicts = filter(None, (parent.__dict__.get('__tags__') for parent in bases))
-            tagsItemsList = chain(*(tags.items() for tags in tagDicts), clsdict.tags.items())
+            tagsItems = (item for tagsDict in attachItem(tagDicts, clsdict.tags) for item in tagsDict.items())
 
             # ▼ Merge all tags by tag name
             newTags = {}
-            for k, g in groupby(sorted(tagsItemsList), lambda item: item[0]):
+            getIndex = itemgetter(0)
+            for k, g in groupby(sorted(tagsItems, key=getIndex), getIndex):
                 newTags[k] = tuple(chain.from_iterable((i[1] for i in g)))
 
             # ▼ Check for name collisions
@@ -255,7 +270,7 @@ class TaggedAttrsTitledMeta(ClassModifier):
         return super().__new__(metacls, clsname, bases, dict(clsdict), **kwargs)
 
 
-class TaggedAttrsTitled(metaclass=TaggedAttrsTitledMeta, baseClass=True):
+class TaggedAttrsTitled(metaclass=TaggedAttrsTitledType, baseClass=True):
     __slots__ = ()
 
 
@@ -268,13 +283,13 @@ class SectionTitle:  # CONSIDER: maybe, redefine it a bit nicer somehow ...
 
 SECTION = SectionTitle()
 
-class NestedTagsAndSlotsMeta(TaggedAttrsNestedMeta, InjectedSlotsMeta):
+class NestedTagsAndSlotsType(TaggedAttrsNestedType, InjectedSlotsType):
     pass
 
-class TitledTagsAndSlotsMeta(TaggedAttrsTitledMeta, InjectedSlotsMeta):
+class TitledTagsAndSlotsType(TaggedAttrsTitledType, InjectedSlotsType):
     pass
 
-class TaggedSlots(TaggedAttrsTitled, InjectedSlots, metaclass=TitledTagsAndSlotsMeta, baseClass=True):
+class TaggedSlots(TaggedAttrsTitled, InjectedSlots, metaclass=TitledTagsAndSlotsType, baseClass=True):
     __slots__ = ()
 
 Tagged = TaggedAttrsTitled
@@ -298,7 +313,7 @@ if __name__ == '__main__':
     assert t.a == 4, 'init defaults with subclass'
 
     try:
-        class Test_DefaultsInitFail(metaclass=TitledTagsAndSlotsMeta):
+        class Test_DefaultsInitFail(metaclass=TitledTagsAndSlotsType):
             SECTION['test_fail']
             b: int = 5
         t = Test_DefaultsInitFail()
@@ -506,7 +521,8 @@ if __name__ == '__main__':
     if hasattr(t, '__dict__'): print(formatDict(t.__dict__))
 
     print(f"Attrs of t:")
-    print(t.a, t.b, t.c, t.d, t.e, t.f, t.g, t.h)
+    for attr in ('abcdefgh'):
+        print(f"{attr} = {getattr(t, attr, '<No attr>')}")
 
     print(f"Size of t object: {size(t)}")
 

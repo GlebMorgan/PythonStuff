@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from functools import wraps
 from itertools import chain
 from os import linesep
-from typing import Union
+from typing import Union, Iterable
 from time import time
 
 import stdlib_list
@@ -19,7 +19,7 @@ sampledict = {
     'ellipsis': ...,
     'list': [1, 2, 3, 4, 5, ('a', 'b', 'c'), ..., None],
     'dict': {1: 'first', 2: 'second'},
-    'object': object,
+    'object': object(),
     'errorClass': RuntimeError,
     'function': print,
     'module': stdlib_list
@@ -52,7 +52,8 @@ class Timer:
 
 class InternalNameShadingVerifier():
 
-    def __init__(self, docslibs=True, reallibs=True, builtins=True, keywords=True, internals=False):
+    def __init__(self, docslibs=True, reallibs=True, builtins=True,
+                 builtin_modules=True, keywords=True, internals=False):
         self.internalNamesDict = {}
         self.checkinternals = internals
         if (docslibs): self.internalNamesDict['docslibs'] = stdlib_list.stdlib_list()
@@ -60,6 +61,9 @@ class InternalNameShadingVerifier():
             import keyword
             self.internalNamesDict['keywords'] = keyword.kwlist
         if (builtins):
+            import builtins as module_builtins
+            self.internalNamesDict['builtins'] = dir(module_builtins)
+        if (builtin_modules):
             modules = []
             try:
                 import sys
@@ -67,7 +71,7 @@ class InternalNameShadingVerifier():
                     if (not modulename.startswith('_')): self._public_submodules_recursive(modules, '', modulename)
             except RecursionError: modules.append(...)
 
-            self.internalNamesDict['builtins'] = modules
+            self.internalNamesDict['builtin_modules'] = modules
         if (reallibs):
             import distutils.sysconfig, os
             stdlib_items = []
@@ -416,6 +420,7 @@ def formatDict(d: dict, indent=4, level=0, limit=None):
             yield f"{addIndent('', level+1)}{name}: {str(value)}"
         if trimmed: yield addIndent('...')
 
+    if not d: return '{}'
     indent = ' ' * indent
     shortd = trimDict(d, limit) if limit else d
     return linesep.join(chain('{', iteritems(shortd, trimmed = len(d) != len(shortd)), (addIndent('}', level),)))
@@ -469,6 +474,28 @@ class Dummy:
     def __call__(self, *args, **kwargs): return self
 
     def __bool__(self): return False
+
+
+class VoidDict():
+    """ Emulate empty dict, but not actually creating one """
+
+    def items(self): return self
+
+    def values(self): return self
+
+    def keys(self): return self
+
+    def get(self): return None
+
+    def __iter__(self): return self
+
+    def __next__(self): raise StopIteration
+
+
+Null = type('NULL', (), {'__slots__': (), '__doc__': """
+    Denotes non-existent value.
+    Should not be used by user-side code
+"""})()
 
 
 class isiterableMeta(type):
@@ -528,6 +555,12 @@ def listAttrs(obj, invoke=False, limit: int = None):
 
         if isinstance(v, dict): v = formatDict(v, limit=limit)
         print(f"{a} = {v}", sep=linesep)
+
+
+def attachItem(iterable: Iterable, append=Null, prepend=Null):
+    if prepend is not Null: yield prepend
+    yield from iterable
+    if append is not Null: yield append
 
 
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
