@@ -144,58 +144,6 @@ class ClsdictTagNestedProxy(dict):
         self['__tags__'][tagname] = tuple(taggedList)
 
 
-class InjectedSlotsType(ClassModifier):
-
-    def __new__(metacls, clsname, bases, clsdict, **kwargs):
-        if not kwargs.get('baseClass'):
-            annotations = getAnnotations(clsdict)
-            slots = []
-            defaults = {}
-            for attr, annotation in annotations.items():
-                if isDunderAttr(attr): continue
-                if isClassVar(annotation): continue
-                slots.append(attr)
-                try: defaults[attr] = clsdict[attr]
-                except KeyError: pass
-                else: del clsdict[attr]
-            if defaults:
-                # ▼ if subclassed from class of this metaclass => subclassed from InjectedSlots
-                if bases and type(bases[0]) is metacls:
-                    clsdict['_defaults_'] = metacls.collectDefaults(bases, defaults)
-                else:
-                    # ▼ InjectedSlots.__new__ should initialize defaults
-                    raise CodeDesignError(f"In '{clsname}' class signature: {metacls.__name__} metaclass "
-                                          f"could not initialize slots with defaults defined in class. "
-                                          f"Inherit from corresponding base class")
-            clsdict['__slots__'] = tuple(slots)
-        return super().__new__(metacls, clsname, bases, clsdict)
-
-    @staticmethod
-    def collectDefaults(bases, currentDefaults):
-        dicts = attachItem(
-                iterable=filter(None, (parent.__dict__.get('_defaults_') for parent in reversed(bases))),
-                append=currentDefaults
-        )
-        newDefaults = dicts.__next__()
-        for defaults in dicts: newDefaults.update(defaults)
-        return newDefaults
-
-
-class InjectedSlots(metaclass=InjectedSlotsType, baseClass=True):
-    __slots__ = ()
-
-    def __new__(cls, *args, **kwargs):
-        if isinstance(super(), object):
-            instance = object.__new__(cls)
-        else:
-            instance = super().__new__(cls, *args, **kwargs)
-
-        if hasattr(cls, '_defaults_'):
-            for attr, value in cls._defaults_.items():
-                if not hasattr(instance, attr): setattr(instance, attr, value)
-        return instance
-
-
 class TaggedAttrsNestedType(ClassModifier):
 
     @classmethod
@@ -292,18 +240,72 @@ class SectionTitle:  # CONSIDER: maybe, redefine it a bit nicer somehow ...
 
 SECTION = SectionTitle()
 
+
+class InjectedSlotsType(ClassModifier):
+
+    def __new__(metacls, clsname, bases, clsdict, **kwargs):
+        if not kwargs.get('baseClass'):
+            annotations = getAnnotations(clsdict)
+            slots = []
+            defaults = {}
+            for attr, annotation in annotations.items():
+                if isDunderAttr(attr): continue
+                if isClassVar(annotation): continue
+                slots.append(attr)
+                try: defaults[attr] = clsdict[attr]
+                except KeyError: pass
+                else: del clsdict[attr]
+            if defaults:
+                # ▼ if subclassed from class of this metaclass => subclassed from InjectedSlots
+                if bases and type(bases[0]) is metacls:
+                    clsdict['_defaults_'] = metacls.collectDefaults(bases, defaults)
+                else:
+                    # ▼ InjectedSlots.__new__ should initialize defaults
+                    raise CodeDesignError(f"In '{clsname}' class signature: {metacls.__name__} metaclass "
+                                          f"could not initialize slots with defaults defined in class. "
+                                          f"Inherit from corresponding base class")
+            clsdict['__slots__'] = tuple(slots)
+        return super().__new__(metacls, clsname, bases, clsdict)
+
+    @staticmethod
+    def collectDefaults(bases, currentDefaults):
+        dicts = attachItem(
+                iterable=filter(None, (parent.__dict__.get('_defaults_') for parent in reversed(bases))),
+                append=currentDefaults
+        )
+        newDefaults = dicts.__next__()
+        for defaults in dicts: newDefaults.update(defaults)
+        return newDefaults
+
+
+class InjectedSlots(metaclass=InjectedSlotsType, baseClass=True):
+    __slots__ = ()
+
+    def __new__(cls, *args, **kwargs):
+        if isinstance(super(), object):
+            instance = object.__new__(cls)
+        else:
+            instance = super().__new__(cls, *args, **kwargs)
+
+        if hasattr(cls, '_defaults_'):
+            for attr, value in cls._defaults_.items():
+                if not hasattr(instance, attr): setattr(instance, attr, value)
+        return instance
+
+
 class NestedTagsAndSlotsType(TaggedAttrsNestedType, InjectedSlotsType):
     pass
 
 class TitledTagsAndSlotsType(TaggedAttrsTitledType, InjectedSlotsType):
     pass
 
-class TaggedSlots(TaggedAttrsTitled, InjectedSlots, metaclass=TitledTagsAndSlotsType, baseClass=True):
-    __slots__ = ()
 
 Tagged = TaggedAttrsTitled
 
 Slots = InjectedSlots
+
+class TaggedSlots(TaggedAttrsTitled, InjectedSlots, metaclass=TitledTagsAndSlotsType, baseClass=True):
+    __slots__ = ()
 
 
 # -------------------------------------------------------------------------------------------------------------------- #
