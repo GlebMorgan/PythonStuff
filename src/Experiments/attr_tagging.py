@@ -5,7 +5,7 @@ from operator import itemgetter
 from sys import getsizeof as size
 from typing import ClassVar, Tuple, Optional
 
-from Utils import VoidDict, formatDict, legacy, attachItem
+from ..Utils import VoidDict, formatDict, legacy, attachItem
 
 
 # TODO: Add option to auto-init empty class variables (like 'd: ClassVar[str]') with None
@@ -19,7 +19,13 @@ from Utils import VoidDict, formatDict, legacy, attachItem
 # TODO: implement lookups diving into mro classes when searching for defaults to initialize slots
 #           just like normal attrs lookup is performed instead of creating cumulative _defaults_ in each class
 
-#
+# CONSIDER: lazy attrs evaluation (problem is with conflicting names to access and store attr value)
+
+# CONSIDER:
+
+# TODO: Create wrapper descriptor for __slots__ to:
+#           1. make lookups for a _defaults_, don't assign it to a slot;
+#           2. allow for 'frozen' sections via (SECTION['name', const])
 
 
 @legacy
