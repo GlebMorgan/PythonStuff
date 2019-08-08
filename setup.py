@@ -10,5 +10,5 @@ setup(
     author='GlebMorgan',
     author_email='glebmorgan@gmail.com',
     description='Utilities to use cross-project',
-    install_requires=['PyQt5', 'stdlib_list']
+    install_requires=['PyQt5', 'stdlib_list', 'orderedset']
 )

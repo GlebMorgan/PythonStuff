@@ -498,6 +498,8 @@ if __name__ == '__main__':
             super().__init__(par)
             self.b = par
 
+        def m(self): pass
+
 
     t = Test_SubclassedTaggedSlots('a_var')
     # assert not hasattr(t, '__dict__'), '__dict__'
