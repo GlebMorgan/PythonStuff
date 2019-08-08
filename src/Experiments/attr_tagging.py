@@ -9,9 +9,17 @@ from Utils import VoidDict, formatDict, legacy, attachItem
 
 
 # TODO: Add option to auto-init empty class variables (like 'd: ClassVar[str]') with None
+
 # TODO: document all this stuff!
+
 # CONSIDER: Add tagging via 'with' block
+
 # CONSIDER: prevent creation of unused classes
+
+# TODO: implement lookups diving into mro classes when searching for defaults to initialize slots
+#           just like normal attrs lookup is performed instead of creating cumulative _defaults_ in each class
+
+#
 
 
 @legacy
@@ -60,24 +68,19 @@ class TaggedAttrsInAnnotationsType(ClearAnnotationsType):  # NOTE: not working, 
 
 # -------------------------------------------------------------------------------------------------------------------- #
 
-def macro(f): return f
-
 
 class CodeDesignError(TypeError):
     """ Class is used incorrectly by higher-level code """
 
 
-@macro
 def getAnnotations(clsdict):
     return clsdict.get('__annotations__', VoidDict())
 
 
-@macro
 def isDunderAttr(attrname: str) -> bool:
     return attrname.startswith('__') and attrname.endswith('__')
 
 
-@macro
 def isClassVar(annotation: str) -> bool:
     return annotation.startswith('ClassVar[') and annotation.endswith(']')
 

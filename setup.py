@@ -2,7 +2,8 @@ from setuptools import setup
 
 setup(
     name='PyUtils',
-    version='1.0',
+    version='1.1dev0',
+    package_dir = {'': 'src'},
     packages=['Utils', 'PyQt5Utils'],
     url='https://github.com/GlebMorgan/PythonStuff',
     license='',
