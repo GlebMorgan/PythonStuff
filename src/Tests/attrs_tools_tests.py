@@ -1,13 +1,21 @@
 from __future__ import annotations as annotations_feature
 from ..Experiments.attrs_tools import *
 import unittest
+from orderedset import OrderedSet
 from attr import attrs, attr
-
 
 # TODO: define how to verify that user-side code executes 'from __future__ import annotations'
 
 
 class Test_TaggedType_with_attrs(unittest.TestCase):
+
+    @staticmethod
+    def clsdict(**kwargs):
+        d = defaultdict(OrderedSet, **kwargs)
+        for tag, namesSet in d.items():
+            d[tag] = OrderedSet(namesSet)
+        return d
+
     @attrs(auto_attribs=True)
     class ConvClass(metaclass=TaggedType):
         i = 'no ann'
@@ -25,7 +33,7 @@ class Test_TaggedType_with_attrs(unittest.TestCase):
 
     def test_conv(self):
         c = self.ConvClass(a=0)
-        self.assertEqual(self.ConvClass.__tags__, dict(test=('c',), empty=()))
+        self.assertEqual(self.ConvClass.__tags__, self.clsdict(test=('c',), empty=()))
         self.assertEqual(self.ConvClass.__annotations__, dict(a='int', b='str', c='bool'))
         self.assertEqual(c.a, 0)
         self.assertEqual(c.i, 'no ann')
@@ -47,7 +55,7 @@ class Test_TaggedType_with_attrs(unittest.TestCase):
 
     def test_slots(self):
         s = self.SlotsClass(a=0)
-        self.assertEqual(self.ConvClass.__tags__, dict(test=('c',), empty=()))
+        self.assertEqual(self.ConvClass.__tags__, self.clsdict(test=('c',), empty=()))
         self.assertEqual(self.ConvClass.__annotations__, dict(a='int', b='str', c='bool'))
         self.assertEqual(s.a, 0)
         self.assertEqual(s.i, 'no ann')
@@ -93,7 +101,7 @@ class Test_TaggedType_with_attrs(unittest.TestCase):
         ch = self.ChildClass(a=0, e=99)
         self.assertTrue(hasattr(ch, '__slots__'))
         self.assertFalse(hasattr(ch, '__dict__'))
-        self.assertEqual(ch.__class__.__tags__, dict(test=('c', 'g'), empty=('k',)))
+        self.assertEqual(ch.__class__.__tags__, self.clsdict(test=('c', 'g'), empty=('k',)))
         self.assertEqual(ch.__class__.__annotations__, dict(e='int', f='str', g='bool', k=ch.Nested.__qualname__))
 
 

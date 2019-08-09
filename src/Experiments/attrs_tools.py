@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from functools import partial
-from itertools import groupby, chain
+from itertools import groupby, chain, starmap
 from operator import itemgetter, setitem
 from typing import Union, Tuple
 from orderedset import OrderedSet
@@ -16,8 +16,9 @@ class SectionTitle:
     proxy: ClassdictProxy = None
 
     def __getitem__(self, tagname: Union[str, Tuple[str, const]], option=None):
+        # TODO: if tagname is None ——► clear tag
         if not isinstance(tagname, str): raise ValueError(f"Tag name is not a string: {tagname}")
-        if option is None: return self.proxy.setNewTag(tagname.lower())
+        elif option is None: return self.proxy.setNewTag(tagname.lower())
         elif option is not const and option != 'const': raise ValueError(f"Unsupported option: {option}")
         else: return self.proxy.setNewTag(tagname.lower(), frozen=True)
 
@@ -93,7 +94,8 @@ class TaggedAttrsTitledType(type):
 
             # ▼ Merge all tags by tag name
             for tagsDict in tagsDicts:
-                map(partial(setitem, newTags), (tagname, namesSet for tagname, namesSet in tagsDict.items()))
+                reduce_items = ((tagname, newTags[tagname] | namesSet) for tagname, namesSet in tagsDict.items())
+                for _ in starmap(partial(setitem, newTags), reduce_items): pass
 
         return super().__new__(*args)
 
