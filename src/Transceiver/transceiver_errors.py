@@ -34,9 +34,13 @@ class BadDataError(SerialCommunicationError):
     """ Data received over serial port is corrupted """
 
 
-class BadRfcError(SerialCommunicationError):
+class BadCrcError(SerialCommunicationError):
+    """ Checksum validation failed """
+
+
+class BadRfcError(BadCrcError):
     """ RFC checksum validation failed """
 
 
-class BadLrcError(SerialCommunicationError):
+class BadLrcError(BadCrcError):
     """ DSP protocol: LRC checksum validation failed """
