@@ -2,7 +2,7 @@ import struct
 from functools import wraps
 
 import serial
-from ..Utils import Logger, alias, bytewise, VerboseError
+from Utils import Logger, bytewise
 from .checksums import rfc1071
 
 log = Logger("Serial")
@@ -11,40 +11,6 @@ slog = Logger("Packets")
 # CONSIDER: move all SerialCommunication-related errors to Transceiver class (interface)
 #           and import it into utilizing classes to allow interface definition and raising proper error types
 
-# ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ ERRORS ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ #
-
-
-SerialError = alias(serial.serialutil.SerialException)
-
-SerialWriteTimeoutError = alias(serial.serialutil.SerialTimeoutException)
-SerialWriteTimeoutError.__doc__ = """ Failed to send data for 'Serial().write_timeout' seconds """
-
-
-class SerialReadTimeoutError(SerialError):
-    """ No data is received for 'Serial().timeout' seconds """
-
-
-class AddressMismatchError(SerialError):
-    """ Address defined in header does not match with host address """
-
-
-class SerialCommunicationError(VerboseError, SerialError):
-    """ Communication-level error, indicate failure in packet transmission process """
-
-
-class BadDataError(SerialCommunicationError):
-    """ Data received over serial port is corrupted """
-
-
-class BadRfcError(SerialCommunicationError):
-    """ RFC checksum validation failed """
-
-
-class BadLrcError(SerialCommunicationError):
-    """ DSP protocol: LRC checksum validation failed """
-
-
-# ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ ERRORS ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ #
 
 # COMMAND PACKET STRUCTURE
 # 1           2     3:4           5:6         7:8       9:...         -3    -2:-1

@@ -347,15 +347,6 @@ def this(ref):
     yield ref
 
 
-class VerboseError:
-    def __init__(self, *args, data=None, dataname=None):
-        if (data is not None):
-            if (dataname is None): self.dataname = "Bytes"
-            else: self.dataname = dataname
-            self.data = data
-        super().__init__(*args)
-
-
 def castStr(targetType: type, value: str) -> Union[None, str, int, float, bool]:
     """ Convert string 'value' to specified type (non case-sensitively).
         ['True', 'Yes', '1', 'ON']  —> True <bool>
@@ -559,10 +550,35 @@ def listAttrs(obj, invoke=False, limit: int = None):
 
 
 def attachItem(iterable: Iterable, append=Null, prepend=Null):
+    """ Attach one item to an iterable (before or/and after) and return resulting extended generator """
     if prepend is not Null: yield prepend
     yield from iterable
     if append is not Null: yield append
 
+
+def die(msg: Union[int, str], errcode: int = 1):
+    """ Display message 'msg', wait for a key press and exit with exit code 'errcode'
+        If first parameter is integer number, it is interpreted as an error code,
+            and msg is considered to be omitted
+    """
+
+    if isinstance(msg, int): errcode, msg = msg, ''
+    print(msg)
+    input('Press any key to exit ...')
+    exit(errcode)
+
+
+def ask(msg, options=None):
+    """ TODO """
+    if not options:
+        options = ['y', 'n']
+    options = list(options)
+    choices = f"{msg} [{', '.join((name if name else '<Enter>' for name in options))}]: "
+    for i, string in enumerate(options): options[i] = string.lower()
+    for _ in range(10):
+        ans = input(choices)
+        if ans.strip().lower() in options: return ans
+    else: die("Run out of attempts")
 
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 

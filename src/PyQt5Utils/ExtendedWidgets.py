@@ -3,7 +3,7 @@ from __future__ import annotations
 from PyQt5.QtCore import QStringListModel, QTimer, pyqtSignal
 from PyQt5.QtGui import QPalette, QColor
 from PyQt5.QtWidgets import QComboBox, QPushButton, QLineEdit, QVBoxLayout, QMessageBox
-from ..Utils import Logger
+from Utils import Logger
 
 from .Colorer import Colorer
 from .ExtendedWidgetsBase import ActionWidget, ColoredWidget

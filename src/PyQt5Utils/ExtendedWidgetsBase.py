@@ -8,7 +8,7 @@ from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QPalette
 from PyQt5.QtWidgets import QComboBox, QLineEdit, QAction
 from PyQt5.QtWidgets import QWidget
-from ..Utils import Logger, Dummy
+from Utils import Logger, Dummy
 
 from .Colorer import Colorer
 
