@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from Utils import add_slots, Timer
-from Utils.attr_tagging import TaggedSlots, SECTION, TaggedAttrsTitledType
+from ..Utils import add_slots, Timer
+from ..Experiments.attr_tagging import TaggedSlots, SECTION, TaggedAttrsTitledType
 from typing import ClassVar, Callable
 from timeit import timeit
 

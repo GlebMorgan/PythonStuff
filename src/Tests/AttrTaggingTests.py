@@ -1,5 +1,5 @@
 from __future__ import annotations
-from Utils import formatDict
+from ..Utils import formatDict
 
 
 class TagMeta(type):

@@ -114,6 +114,8 @@ class Test_TaggedType_with_attrs(unittest.TestCase):
     def test_name_conflict(self):
         nc = self.NameConflict(a=0)
 
+    # FIXME: STOPPED HERE: finish with these ▲ tests
+
 
 if __name__ == '__main__':
     unittest.main()

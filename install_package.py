@@ -36,4 +36,4 @@ if __name__ == '__main__':
     except Exception as e:
         die(e)
     else:
-        die("Installed!", 0)
+        die("DONE!", 0)

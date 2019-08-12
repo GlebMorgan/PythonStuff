@@ -8,8 +8,8 @@ def rfc1071str(msgStr):
 if __name__ == '__main__':
     msgStr = "5A-0E-06-80-9F-71-01-81-43-00-00-00-01-00-00-00-00-00"
     msgStr = "".join("".join(msgStr.split('-')).split(' '))
-    print(str(hex(RFC1071(msgStr)))[2:].upper())
+    print(str(hex(rfc1071str(msgStr)))[2:].upper())
     a=0xFFFF
     print(bin(a))
     print(bin(~a))
-    print(RFC1071(msgStr))
+    print(rfc1071str(msgStr))
