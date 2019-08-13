@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ..Utils import add_slots, Timer
-from ..Experiments.attr_tagging import TaggedSlots, SECTION, TaggedAttrsTitledType
+from Utils import add_slots, Timer
+from Experiments.attr_tagging_initial import TaggedSlots, SECTION, TaggedAttrsTitledType
 from typing import ClassVar, Callable
 from timeit import timeit
 
@@ -180,24 +180,28 @@ if __name__ != '__main__':
 
 def main():
 
+    # NOTE: inheritance is the thing that slows down instance creation time
+
+    imports = "from Tests.tagged_classes_performance_tests import D, S, NS, SS, AS, AT; "
+
     print("\nCreation:")
-    print(f"Dict: {timeit(stmt='D()', setup='from tests import D')}")
-    print(f"Slots: {timeit(stmt='S()', setup='from tests import S')}")
-    print(f"NoDefaultsSlots: {timeit(stmt='NS()', setup='from tests import NS')}")
-    print(f"SimpleSlots: {timeit(stmt='SS()', setup='from tests import SS')}")
-    print(f"AddSlots: {timeit(stmt='AS()', setup='from tests import AS')}")
-    print(f"Attr.s: {timeit(stmt='AT(b=str(), c=2, g=99, h=True)', setup='from tests import AT')}")
+    print(f"Dict: {timeit(stmt='D()', setup=imports)}")
+    print(f"Slots: {timeit(stmt='S()', setup=imports)}")
+    print(f"NoDefaultsSlots: {timeit(stmt='NS()', setup=imports)}")
+    print(f"SimpleSlots: {timeit(stmt='SS()', setup=imports)}")
+    print(f"AddSlots: {timeit(stmt='AS()', setup=imports)}")
+    print(f"Attr.s: {timeit(stmt='AT(b=str(), c=2, g=99, h=True)', setup=imports)}")
 
     print("\nAccess:")
-    print(f"Dict: {timeit(stmt='t.a; t.b; t.c = t.d * t.e; t.f = t.g*10; t.h; t.i()', setup='from tests import D; t = D()')}")
-    print(f"Slots: {timeit(stmt='t.a; t.b; t.c = t.d * t.e; t.f = t.g*10; t.h; t.i()', setup='from tests import S; t = S()')}")
-    print(f"NoDefaultsSlots: {timeit(stmt='t.a; t.b; t.c = t.d * t.e; t.f = t.g*10; t.h; t.i()', setup='from tests import NS; t = NS()')}")
-    print(f"SimpleSlots: {timeit(stmt='t.a; t.b; t.c = t.d * t.e; t.f = t.g*10; t.h; t.i()', setup='from tests import SS; t = SS()')}")
-    print(f"AddSlots: {timeit(stmt='t.a; t.b; t.c = t.d * t.e; t.f = t.g*10; t.h; t.i()', setup='from tests import AS; t = AS()')}")
-    print(f"Attr.s: {timeit(stmt='t.a; t.b; t.c = t.d * t.e; t.f = t.g*10; t.h; t.i()', setup='from tests import AT; t = AT(b=str(), c=2, g=99, h=True)')}")
+    print(f"Dict: {timeit(stmt='t.a; t.b; t.c = t.d * t.e; t.f = t.g*10; t.h; t.i()', setup=imports + 't = D()')}")
+    print(f"Slots: {timeit(stmt='t.a; t.b; t.c = t.d * t.e; t.f = t.g*10; t.h; t.i()', setup=imports + 't = S()')}")
+    print(f"NoDefaultsSlots: {timeit(stmt='t.a; t.b; t.c = t.d * t.e; t.f = t.g*10; t.h; t.i()', setup=imports + 't = NS()')}")
+    print(f"SimpleSlots: {timeit(stmt='t.a; t.b; t.c = t.d * t.e; t.f = t.g*10; t.h; t.i()', setup=imports + 't = SS()')}")
+    print(f"AddSlots: {timeit(stmt='t.a; t.b; t.c = t.d * t.e; t.f = t.g*10; t.h; t.i()', setup=imports + 't = AS()')}")
+    print(f"Attr.s: {timeit(stmt='t.a; t.b; t.c = t.d * t.e; t.f = t.g*10; t.h; t.i()', setup=imports + 't = AT(b=str(), c=2, g=99, h=True)')}")
 
     print("\nSize:")
-    from tests import D, S, NS, SS, AS, AT
+    from tagged_classes_performance_tests import D, S, NS, SS, AS, AT
     print(f"Dict: {size(D())}")
     print(f"Slots: {size(S())}")
     print(f"NoDefaultsSlots: {size(NS())}")

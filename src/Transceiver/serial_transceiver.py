@@ -4,6 +4,7 @@ from functools import wraps
 import serial
 from Utils import Logger, bytewise
 from .checksums import rfc1071
+from .transceiver_errors import *
 
 log = Logger("Serial")
 slog = Logger("Packets")
