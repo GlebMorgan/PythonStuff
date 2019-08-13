@@ -10,7 +10,7 @@ from ..Utils import attachItem
 
 
 class CodeDesignError(TypeError):
-    """ Class is used incorrectly by higher-level code """
+    """ Error: class is used incorrectly by higher-level code """
 
 
 class const:
