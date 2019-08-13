@@ -8,12 +8,12 @@ from typing import ClassVar, Tuple, Optional
 from Utils import VoidDict, formatDict, legacy, attachItem
 
 
-# TODO: Create wrapper descriptor for __slots__ to allow for 'frozen' sections via (SECTION['name', const])
-
-# TODO: lazy attrs evaluation (problem is with conflicting names to access and store attr value)
-
 # TODO: add unannotated attrs tagging support (intercept in clsdict.__setitem__()
 #       and add subsequent check in __annotations__.__setitem__() to avoid duplicates
+
+# TODO: Create wrapper descriptor for __slots__ to allow for 'frozen' sections via SECTION['tagname', const]
+
+# TODO: lazy attrs evaluation (problem is with conflicting names to access and store attr value)
 
 # TODO: define how to verify that user-side code executes 'from __future__ import annotations'
 

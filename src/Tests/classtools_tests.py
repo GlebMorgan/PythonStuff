@@ -364,7 +364,23 @@ class Test_AttrTagging(unittest.TestCase):
 
             DuplicateSectionsDefinitions()
 
+    def test_reset_tag(self):
+        class ResetTag(metaclass=TaggedType):
+            a: int
+            SECTION('smth')
+            b: str = 'gg'
+            c: str = 'lol'
+            SECTION('other')
+            d: int = 0
+            SECTION(None)
+            e: str = 'pp'
 
+        r = ResetTag()
+        self.assertEqual(ResetTag.__tags__, clsdict(smth=('b', 'c'), other=('d',)))
+        self.assertFalse(any('e' in tags for tags in ResetTag.__tags__.values()))
+        self.assertEqual(r.e, 'pp')
+
+a = SECTION('_')
 
 
 if __name__ == '__main__':
