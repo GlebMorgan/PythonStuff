@@ -14,8 +14,9 @@ def clsdict(**kwargs):
         d[tag] = OrderedSet(namesSet)
     return d
 
+def test(a): return f'{a} keks'
 
-@unittest.skip("Possible name collisions")
+@unittest.skip("Old attrs-related tests")
 class Test_TaggedType_with_attrs(unittest.TestCase):
 
 
