@@ -4,7 +4,7 @@ from collections import defaultdict
 from functools import partial
 from itertools import starmap
 from operator import setitem
-from typing import Optional
+from typing import Optional, Dict
 
 from orderedset import OrderedSet
 
@@ -12,6 +12,19 @@ from Utils import attachItem, Logger
 
 log = Logger('AttrTagging')
 log.setLevel('INFO')
+
+
+def isDunderAttr(attrname: str) -> bool:
+    return attrname.startswith('__') and attrname.endswith('__')
+
+
+def isClassVar(annotation: str) -> bool:
+    return annotation.startswith('ClassVar[') and annotation.endswith(']')
+
+
+def isMemberFunction(target: Dict, attr) -> bool:
+    if not hasattr(attr, '__qualname__'): return False  # just optimization not to fetch class qualname
+    return attr.__qualname__ == f"{target.get('__qualname__')}.{attr.__name__}"
 
 
 class CodeDesignError(TypeError):
@@ -61,10 +74,9 @@ class AnnotationProxy(dict):
         # ▼ Put annotation on its place
         self.target.get('__annotations__')[attrname] = value
 
-        # ▼ Set tag to attr: dunders are ignored; current tag should be defined
-        if (not (attrname.startswith('__') and attrname.endswith('__'))
-                and self.target.currentTag is not None):
-            self.target.tags[self.target.currentTag].add(attrname)
+        # ▼ assign tag if attr has no value, only annotation
+        #       (duplicate assignments won't be performed since .tags is a set)
+        self.target.assignTag(attrname)
 
 
 class ClsdictProxy(dict):
@@ -72,23 +84,29 @@ class ClsdictProxy(dict):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.set('__tags__', defaultdict(OrderedSet))
-        self.set('__annotations__', {})
+        self.set('__annotations__', {})  # CONSIDER: why do I need this?)
         self.tags = self.get('__tags__')  # alias for self['__tags__']
         self.spy = AnnotationProxy(self)
         self.currentTag: str = None
 
     def __getitem__(self, key):
         log.debug(f'[{key}] ——►')
-        if key == '__annotations__':
-            return self.spy
+        if key == '__annotations__': return self.spy
         else: return super().__getitem__(key)
 
     def __setitem__(self, key, value):
         log.debug(f'[{key}] ◄—— {value}')
+        if not isMemberFunction(self, value): self.assignTag(key)
         return super().__setitem__(key, value)
 
+    def assignTag(self, attrname):
+        """ Set tag to attr: dunders and member methods are ignored """
+        if not isDunderAttr(attrname) and self.currentTag is not None:
+            self.tags[self.currentTag].add(attrname)
+        # TODO: create Attr() object here + rename method
+
     def set(self, key, value):
-        """ __setitem__ for internal use """
+        """ __setitem__() for internal use """
         return super().__setitem__(key, value)
 
     def resetTag(self):
@@ -107,6 +125,8 @@ class TaggedAttrsTitledType(type):
         Variables defined without annotations are not tagged
         SECTION without any attrs inside is not created
         Tag names are case-insensitive
+        Member methods (class is direct parent in __qualname__) are not tagged,
+            even if they are assigned not using 'def'
     """
 
     __tags__ = {}

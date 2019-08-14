@@ -8,8 +8,7 @@ from typing import ClassVar, Tuple, Optional
 from Utils import VoidDict, formatDict, legacy, attachItem
 
 
-# TODO: add unannotated attrs tagging support (intercept in clsdict.__setitem__()
-#       and add subsequent check in __annotations__.__setitem__() to avoid duplicates
+# TODO: inject slots
 
 # TODO: Change SectionTitle syntax to SECTION['sectionname'].option1.optionN
 
