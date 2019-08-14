@@ -11,6 +11,11 @@ from Utils import VoidDict, formatDict, legacy, attachItem
 # TODO: add unannotated attrs tagging support (intercept in clsdict.__setitem__()
 #       and add subsequent check in __annotations__.__setitem__() to avoid duplicates
 
+# TODO: Change SectionTitle syntax to SECTION['sectionname'].option1.optionN
+
+# TODO: Add support to assigning options to individual attrs with following syntax:
+#       name: type = attr[value].option1.optionN
+
 # TODO: Create wrapper descriptor for __slots__ to allow for 'frozen' sections via SECTION['tagname', const]
 
 # TODO: lazy attrs evaluation (problem is with conflicting names to access and store attr value)
