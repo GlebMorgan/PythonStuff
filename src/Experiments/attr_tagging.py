@@ -36,22 +36,17 @@ class const:
     """ Marker class to denote immutable attrs """
 
 
-@legacy
-class Option:
-    _instance_ = None  # Make singleton as class just provides syntax
+class OptionsParser:
+    # CONSIDER: do I need singleton here?
+    # _instance_ = None  # Make singleton as class just provides syntax
+    #
+    # def __new__(cls, *args, **kwargs):
+    #     if not isinstance(cls._instance_, cls):
+    #         cls._instance_ = object.__new__(cls)
+    #     return cls._instance_
 
-    def __new__(cls, *args, **kwargs):
-        if not isinstance(cls._instance_, cls):
-            cls._instance_ = object.__new__(cls)
-        return cls._instance_
-
-    def __init__(self, optionname):
-        self.attrobject = None  # attrobject attr object
-        self.name = optionname
-
-    def __call__(self, par):
-        setattr(self.attrobject, self.name, par)  # set option with parameter
-        return self.attrobject
+    def __init__(self, target: Dict[str, Any]):
+        self.options = target
 
     def __get__(self, instance, owner):
         log.debug("Get option")  # set option without parameters
@@ -59,11 +54,15 @@ class Option:
         setattr(self.attrobject, self.name, True)
         return self.attrobject
 
+    def __call__(self, par):
+        setattr(self.attrobject, self.name, par)  # set option with parameter
+        return self.attrobject
+
 
 class Attr:
     """ Mutable default values must define .copy() method """
     _options_ = dict.fromkeys(('const', 'lazy',), False)  # TODO: 'factory'
-    __slots__ = 'name', 'default', 'type', *_options_.keys()
+    __slots__ = 'name', 'default', 'type', 'tag', *_options_.keys()
 
     owner = None  # class containing this attrs
 
@@ -96,6 +95,7 @@ class Attr:
         # ▼ Called using syntax #2
         if item not in self.get('_options_').keys():
             raise ValueError(f"Invalid option: {item}")
+        # TODO: dissallow duplicate option assignment
         setattr(self, item, True)
         self._current_ = item
         return self
