@@ -484,10 +484,13 @@ class VoidDict():
     def __next__(self): raise StopIteration
 
 
-Null = type('NULL', (), {'__slots__': (), '__doc__': """
-    Denotes non-existent value.
-    Should not be used by user-side code
-"""})()
+Null = type('NULL', (), {
+    '__slots__': (),
+    '__doc__': """ Denotes non-existent value. Should never be assigned to anything by user code """,
+    '__bool__': lambda self: False,
+    '__str__': lambda self: "N/A",
+    '__repr__': lambda self: auto_repr(self, 'Null object'),
+})()
 
 
 class isiterableMeta(type):
