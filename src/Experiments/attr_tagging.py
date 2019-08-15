@@ -8,7 +8,7 @@ from typing import Optional, Dict, Any, Mapping, NamedTuple, Union
 
 from orderedset import OrderedSet
 
-from Utils import attachItem, Logger, legacy
+from Utils import attachItem, Logger, legacy, auto_repr, Null
 
 log = Logger('AttrTagging')
 log.setLevel('INFO')
@@ -73,6 +73,7 @@ class Option:
     """ Option descriptor """
 
     __slots__ = 'name', 'owner'
+
     VALIDATE_ARGUMENTS = True
 
     def __init__(self, optionname: str):
@@ -80,35 +81,44 @@ class Option:
         self.owner: OptionFetcher = None
         # ▲ Target attr object, assigned in __get__
 
-    def __get__(self, instance: OptionFetcher, owner):
-        if owner is None: return self  # Access descriptor itself from class
-        if instance.setupMode is False:
-            # ▼ Act as normal getter
-            return getattr(instance.options, self.name)
-        else:
-            # ▼ Set option to attr or change default value
-            if self.owner is instance:
-                # ▼ Same reference means option has been set earlier
-                raise CodeDesignError(f"Duplicate option definition: {self.name}")
-            self.owner = instance
-            self.setOption(True)
-            # return self to allow for option arguments via __call__
-            return self
+    def __get__(self, instance: OptionFetcher, ownercls):
+        # ▼ Access descriptor itself from class
+        if instance is None: return self
 
-    def __call__(self, par):
-        if self.VALIDATE_ARGUMENTS:
-            self.owner.validateArgument(self.name, par)  # TODO: when to validate options?
-        # ▼ If option is called with parameter, reassign option with provided value
-        self.setOption(par)
+        # ▼ Act as normal getter if not in setup mode
+        if instance.setupMode is False:
+            return getattr(instance.options, self.name)
+
+        # ▼ Same reference means option has been set earlier
+        if self.owner is instance:
+            raise CodeDesignError(f"Duplicate option definition: {self.name}")
+
+        # ▼ Set option to attr or change default value otherwise
+        self.owner = instance
+        self.setOption(True)
+
+        # ▼ Store current descriptor to allow owner redirect call with an argument
+        self.owner.currentOption = self
+
         return self.owner
 
+    def __call__(self, arg):
+        if self.VALIDATE_ARGUMENTS:
+            self.owner.validateArgument(self.name, arg)  # CONSIDER: when to validate options?
+        # ▼ If option is called with argument, reassign option with provided value
+        self.setOption(arg)
+        self.owner.currentOption = None
+
     def __getattr__(self, item):
-        # ▼ If next option is defined, call another option descriptor through owner
-        return self.owner.item
+        # ▼ If next option follows, call another option descriptor through owner
+        return getattr(self.owner, item)
 
     def setOption(self, value):
-        if isinstance(self.owner, Attr): setattr(self.owner.options, self.name, value)
-        else: self.owner.defaultOptions[self.name] = value
+        if isinstance(self.owner, Attr):
+            self.owner.options[self.name] = value
+        elif isinstance(self.owner, SectionTitle):
+            self.owner.defaultOptions[self.name] = value
+        # CONSIDER: else — error?
 
 
 class OptionFetcher:
@@ -116,24 +126,32 @@ class OptionFetcher:
 
     defaultOptions = AttrOptions._field_defaults.copy()
     setupMode = True  # TODO: reset this to False when finished class creation
+    currentOption = None
 
     for optionname in AttrOptions._fields:
         locals()[optionname] = Option(optionname)
-        del optionname  # NOTE: awful hack — consider eliminating this
+    del optionname  # NOTE: awful hack — consider eliminating this
 
     def __getattr__(self, item):
+        # ▼ Provide proper error message if wrong option is given
         if self.setupMode is True:
-            # ▼ Provide proper error message if wrong option is given
             raise CodeDesignError(f"Invalid option: {item}")
         else:
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
 
+    def __call__(self, optionArg):
+        if self.currentOption is not None:
+            self.currentOption(optionArg)
+            return self
+        else:
+            raise CodeDesignError(f"Duplicate parenthesis in {self.currentOption.name} option")
+
     @staticmethod
-    def validateArgument(option: str, par):
-        if option == 'lazy':
+    def validateArgument(optionname: str, par):
+        if optionname == 'lazy':
             return isinstance(par, str)
         elif not isinstance(par, bool):
-            raise CodeDesignError(f"Invalid value for '{option}': {par}")
+            raise CodeDesignError(f"Invalid value for '{optionname}': {par}")
 
     @classmethod
     def resetDefaults(cls):
@@ -148,14 +166,14 @@ class OptionFetcher:
 
 class Attr(OptionFetcher):
     """ Mutable default values must define .copy() method
+            Options are optional (heh), bla bla bla...
+                Syntax1: str = attr(default_value) .option1 .option2(parameter) .optionN
+                Syntax2: str = attr(default_value, opt1=True, opt2='par', opt3=True)
         TODO: Attr docstring
     """
 
     __slots__ = 'name', 'default', 'type', 'tag', 'options'
 
-    # TESTME: support 4 syntax variations (these 2 + with []):
-    #           syntax1: str = attr(default_value) .option1 .option2(parameter) .optionN
-    #           syntax2: str = attr(default_value, opt1=True, opt2='par', opt3=True)
     # CONSIDER: d: int = 3 <attr> 'lazy const -init'
     # CONSIDER: d: int = attr > 3 > 'lazy const -init'
     # CONSIDER: d: int = attr > 'lazy const -init'          # no default
@@ -163,19 +181,17 @@ class Attr(OptionFetcher):
     # CONSIDER: default_factory issue: is it still relevant
     #           when defaults are assigned to each instance individually?
 
-    def __init__(self, value, **options):
+    def __init__(self, value=Null, **options):
         self.default = value
+        if options: self.validateOptions(options)
         # ▼ Apply section-common defaults
-        self.validateOptions(options)
-        self.options = AttrOptions(**self.defaultOptions, **options)
+        self.options = {**self.defaultOptions, **options}
 
     def __str__(self):
-        return f"Attr '{self.name}' {{{self.default}}} <{self.type}> " \
-            f"{'|'.join(option for option in self.get('options').keys() if self.get(option) is not False)}"
+        return f"Attr '{self.name}' ({self.default}) <{self.type}> ⚑{self.tag}" \
+            f"{{{'|'.join(option for option in self.options.keys() if self.options)}}}".strip()
 
-    def get(self, item):
-        """ Attribute getter for internal use """
-        return super().__getattribute__(self, item)
+    def __repr__(self): auto_repr(self, self.name)
 
 
 class SectionTitle(OptionFetcher):
@@ -194,8 +210,8 @@ class SectionTitle(OptionFetcher):
     proxy: ClsdictProxy = None
 
     def __getitem__(self, tagname: Optional[str], **options):
+        # ▼ Reset tag
         if tagname is None:
-            # ▼ Reset tag
             if options:
                 raise CodeDesignError("SECTION options could not be set when resetting tag")
             else:
@@ -208,8 +224,9 @@ class SectionTitle(OptionFetcher):
 
         self.proxy.setNewTag(tagname.lower())
 
-        self.validateOptions(options)
+        if options: self.validateOptions(options)
 
+        assert self.defaultOptions is OptionFetcher.defaultOptions  # TESTME
         self.defaultOptions = AttrOptions._field_defaults.update(**options)
         return self
 
@@ -217,24 +234,24 @@ class SectionTitle(OptionFetcher):
         return self.__getitem__(*args)
 
 
-class AnnotationProxy(dict):
+class AnnotationProxy:
 
-    def __init__(self, clsdictProxy):
-        super().__init__()
-        self.target = clsdictProxy
+    def __init__(self, proxy):
+        self.owner: ClsdictProxy = proxy
 
     def __setitem__(self, attrname, value):
         log.debug(f'[__annotations__][{attrname}] ◄—— {value}')
 
         # ▼ Put annotation on its place
-        self.target.annotations[attrname] = value
+        self.owner.annotations[attrname] = value
 
-        # ▼ Assign tag if attr has no value, only annotation;
-        #   duplicate assignments won't be performed since .tags is a set
-        self.target.addAttr(attrname)
+        # ▼ Add attr even if it has no value (only annotation)
+        #   Duplicate tag assignments won't be performed since .tags contains SETs
+        self.owner.addAttr(attrname)
 
         # ▼ Assign attr.type, if current item is last added to __attrs__
-        lastAddedAttr = self.target.attrs[-1]
+        # TODO: STOPPED HERE
+        lastAddedAttr = self.owner.attrs[-1]
         if lastAddedAttr.name == attrname: lastAddedAttr.type = value
 
 
@@ -242,11 +259,13 @@ class ClsdictProxy(dict):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.tags = self.setdefault('__tags__', defaultdict(OrderedSet))
-        self.attrs = self.setdefault('__attrs__', [])
-        self.annotations = self.setdefault('__annotations__', {})
-        self.spy = AnnotationProxy(self)
-        self.currentTag: str = None
+
+        self.tags: defaultdict  = self.setdefault('__tags__', defaultdict(OrderedSet))
+        self.attrs: list        = self.setdefault('__attrs__', [])
+        self.annotations: dict  = self.setdefault('__annotations__', {})
+        self.spy                = AnnotationProxy(self)
+        self.currentTag: str    = None
+        self.currentAttr: Attr  = None
 
     def __getitem__(self, key):
         log.debug(f'[{key}] ——►')
@@ -259,17 +278,20 @@ class ClsdictProxy(dict):
             self.addAttr(key, value)
         return super().__setitem__(key, value)
 
-    def addAttr(self, attrname, value):
+    def addAttr(self, attrname, value=Null):
         """ Set tag to attr: dunders and member methods are ignored """
+        # ▼ Assign tag
         if self.currentTag is not None:
-            # ▼ Assign tag
             self.tags[self.currentTag].add(attrname)
-        if isinstance(value, Attr): attr = value
-        else: attr = Attr(value)
+
+        # ▼ Create Attr() from member variable if not already
+        attr = value if isinstance(value, Attr) else Attr(value)
         attr.name = attrname
         attr.tag = self.currentTag
         self.attrs.append(attr)
-        # TODO: create Attr() object here + rename method to 'createAttr'
+
+        # ▼ Store current attr to allow spy to set type and avoid duplicates
+        self.currentAttr = attr
 
     @legacy
     def set(self, key, value):
