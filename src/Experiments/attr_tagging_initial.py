@@ -19,6 +19,9 @@ from Utils import VoidDict, formatDict, legacy, attachItem
 
 # TODO: lazy attrs evaluation (problem is with conflicting names to access and store attr value)
 
+# TODO: check all lazy parameters before class creation and reassign it to class methods itself
+#           (raise an error, if method does not exist)
+
 # TODO: define how to verify that user-side code executes 'from __future__ import annotations'
 
 # TODO: document all this stuff!
