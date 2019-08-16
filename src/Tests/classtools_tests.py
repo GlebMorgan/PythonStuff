@@ -26,7 +26,7 @@ class Test_TaggedType_with_attrs(unittest.TestCase):
         a: int
         b: str = 5
 
-        SECTION('test', const)
+        SECTION('test')
         c: bool = False
         d = 8
 
@@ -48,7 +48,7 @@ class Test_TaggedType_with_attrs(unittest.TestCase):
         a: int
         b: str = 5
 
-        SECTION('test', const)
+        SECTION('test')
         c: bool = False
         d = 8
 
@@ -72,7 +72,7 @@ class Test_TaggedType_with_attrs(unittest.TestCase):
         a: int
         b: str = 5
 
-        SECTION('test', const)
+        SECTION('test')
         c: bool = False
         d = 8
 
@@ -89,7 +89,7 @@ class Test_TaggedType_with_attrs(unittest.TestCase):
         e: int = None
         f: str = 5
 
-        SECTION('test', const)
+        SECTION('test')
         g: bool = False
         _h = 8
 
@@ -131,7 +131,7 @@ class Test_AttrTagging(unittest.TestCase):
         a: int
         b: str = 5
 
-        SECTION('test', const)
+        SECTION('test')
         c: bool = False
         d = clsdict
 
@@ -171,7 +171,7 @@ class Test_AttrTagging(unittest.TestCase):
         f: str = 5
         tuple()  # just for ClsdictProxy tests
 
-        SECTION('test', const)
+        SECTION('test')
         g: bool = False
         _h: int = 8  # make this alphabetically preceding
         h = 8
@@ -389,6 +389,12 @@ class Test_AttrTagging(unittest.TestCase):
         self.assertEqual(ResetTag.__tags__, clsdict(smth=('b', 'c'), other=('d',)))
         self.assertFalse(any('e' in tags for tags in ResetTag.__tags__.values()))
         self.assertEqual(r.e, 'pp')
+
+
+class Test_NewTaggedAttrs(unittest.TestCase):
+
+    def test_basic(self):
+        ...
 
 
 if __name__ == '__main__':

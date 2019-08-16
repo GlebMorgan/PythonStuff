@@ -4,7 +4,7 @@ from collections import defaultdict
 from functools import partial
 from itertools import starmap
 from operator import setitem
-from typing import Optional, Dict, Any, Mapping, NamedTuple, Union
+from typing import Optional, Dict, NamedTuple, Union
 
 from orderedset import OrderedSet
 
@@ -12,6 +12,8 @@ from Utils import attachItem, Logger, legacy, auto_repr, Null
 
 log = Logger('AttrTagging')
 log.setLevel('INFO')
+
+VALIDATE_OPTION_ARGUMENTS = True
 
 
 def isDunderAttr(attrname: str) -> bool:
@@ -31,38 +33,6 @@ class CodeDesignError(TypeError):
     """ Error: class is used incorrectly by higher-level code """
 
 
-@legacy  # not to break tests
-class const:
-    """ Marker class to denote immutable attrs """
-
-
-@legacy
-class OptionsParser:
-    # CONSIDER: do I need singleton here?
-    # _instance_ = None  # Make singleton as class just provides syntax
-    #
-    # def __new__(cls, *args, **kwargs):
-    #     if not isinstance(cls._instance_, cls):
-    #         cls._instance_ = object.__new__(cls)
-    #     return cls._instance_
-
-    def __init__(self, target: Dict[str, Any]):
-        self.options = target
-
-    def __get__(self, instance, owner):
-        log.debug("Get option")  # set option without parameters
-        self.attrobject = instance
-        setattr(self.attrobject, self.name, True)
-        return self.attrobject
-
-    def __call__(self, par):
-        setattr(self.attrobject, self.name, par)  # set option with parameter
-        return self.attrobject
-
-
-# ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
-
-
 class AttrOptions(NamedTuple):
     const: bool = False
     lazy: Union[str, bool] = False
@@ -73,8 +43,6 @@ class Option:
     """ Option descriptor """
 
     __slots__ = 'name', 'owner'
-
-    VALIDATE_ARGUMENTS = True
 
     def __init__(self, optionname: str):
         self.name: str = optionname
@@ -103,7 +71,7 @@ class Option:
         return self.owner
 
     def __call__(self, arg):
-        if self.VALIDATE_ARGUMENTS:
+        if VALIDATE_OPTION_ARGUMENTS:
             self.owner.validateArgument(self.name, arg)  # CONSIDER: when to validate options?
         # ▼ If option is called with argument, reassign option with provided value
         self.setOption(arg)
@@ -135,13 +103,13 @@ class OptionFetcher:
     def __getattr__(self, item):
         # ▼ Provide proper error message if wrong option is given
         if self.setupMode is True:
-            raise CodeDesignError(f"Invalid option: {item}")
+            raise CodeDesignError(f"Invalid option: {item}")  # FIXME: This is raised constantly on internal calls
         else:
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
 
     def __call__(self, optionArg):
         if self.currentOption is not None:
-            self.currentOption(optionArg)
+            self.currentOption.__call__(optionArg)
             return self
         else:
             raise CodeDesignError(f"Duplicate parenthesis in {self.currentOption.name} option")
@@ -161,7 +129,7 @@ class OptionFetcher:
     def validateOptions(cls, options: dict):
         for key, value in options.items():
             if key not in AttrOptions._fields: raise CodeDesignError(f"Invalid option: {key}")
-            if cls.VALIDATE_ARGUMENTS: cls.validateArgument(key, value)
+            if VALIDATE_OPTION_ARGUMENTS: cls.validateArgument(key, value)
 
 
 class Attr(OptionFetcher):
@@ -183,22 +151,25 @@ class Attr(OptionFetcher):
 
     def __init__(self, value=Null, **options):
         self.default = value
+        self.type = Null
         if options: self.validateOptions(options)
-        # ▼ Apply section-common defaults
+        # ▼ Apply section-local defaults
         self.options = {**self.defaultOptions, **options}
+        # ▲ CONSIDER: store only those options which != defaults
+        #             and refer to latter when needed (for ex, in __str__)
 
     def __str__(self):
         return f"Attr '{self.name}' ({self.default}) <{self.type}> ⚑{self.tag}" \
-            f"{{{'|'.join(option for option in self.options.keys() if self.options)}}}".strip()
+            f"{{{'|'.join(option for option in self.options.keys() if option is not False)}}}".strip()
 
     def __repr__(self): auto_repr(self, self.name)
 
 
 class SectionTitle(OptionFetcher):
     """ New section marker. Tells ClsdictProxy when new tag is defined.
-        Usages (in class body) (options can be omitted, if not required):
-            • SECTION('tag_name', option1, optionN)
-            • SECTION('tag_name') .option1 .optionN
+        Syntax (expected within class body) (options can be omitted, if not required):
+            • SECTION('tag_name', option1=par, optionN=True)
+            • SECTION('tag_name') .option1(par) .optionN
             (square brackets could be used instead — PyCharm highlights these statements nicely :)
         Supported options:
             • 'const' — all attrs in current section will be immutable
@@ -216,8 +187,9 @@ class SectionTitle(OptionFetcher):
                 raise CodeDesignError("SECTION options could not be set when resetting tag")
             else:
                 self.resetDefaults()
-                self.proxy.resetTag()
-                return
+                self.proxy.currentTag = None
+                # ▼ Give nicer error message if option is defined further using dot notation
+                return self.__class__
 
         elif not isinstance(tagname, str):
             raise CodeDesignError(f"Tag name is not a string: {tagname}")
@@ -226,6 +198,7 @@ class SectionTitle(OptionFetcher):
 
         if options: self.validateOptions(options)
 
+        # ▼ Set section-local defaults based on global defaults
         assert self.defaultOptions is OptionFetcher.defaultOptions  # TESTME
         self.defaultOptions = AttrOptions._field_defaults.update(**options)
         return self
@@ -235,7 +208,8 @@ class SectionTitle(OptionFetcher):
 
 
 class AnnotationProxy:
-
+    # CONSIDER: add annotation-only attrs to cls.__attrs__ later, along with setting attr.type;
+    #           may be problematic since OrderedSet seems incapable of inserting an item in the middle...
     def __init__(self, proxy):
         self.owner: ClsdictProxy = proxy
 
@@ -245,14 +219,11 @@ class AnnotationProxy:
         # ▼ Put annotation on its place
         self.owner.annotations[attrname] = value
 
-        # ▼ Add attr even if it has no value (only annotation)
-        #   Duplicate tag assignments won't be performed since .tags contains SETs
-        self.owner.addAttr(attrname)
+        # ▼ Add attr even if it has not been assigned with anything (only annotation)
+        if self.owner.currentAttr.name != attrname: self.owner.addAttr(attrname)
 
-        # ▼ Assign attr.type, if current item is last added to __attrs__
-        # TODO: STOPPED HERE
-        lastAddedAttr = self.owner.attrs[-1]
-        if lastAddedAttr.name == attrname: lastAddedAttr.type = value
+        self.owner.currentAttr.type = value
+
 
 
 class ClsdictProxy(dict):
@@ -260,12 +231,12 @@ class ClsdictProxy(dict):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.tags: defaultdict  = self.setdefault('__tags__', defaultdict(OrderedSet))
-        self.attrs: list        = self.setdefault('__attrs__', [])
-        self.annotations: dict  = self.setdefault('__annotations__', {})
-        self.spy                = AnnotationProxy(self)
-        self.currentTag: str    = None
-        self.currentAttr: Attr  = None
+        self.tags: defaultdict = self.setdefault('__tags__', defaultdict(OrderedSet))
+        self.attrs: list = self.setdefault('__attrs__', [])
+        self.annotations: dict = self.setdefault('__annotations__', {})
+        self.spy = AnnotationProxy(self)
+        self.currentTag: str = None
+        self.currentAttr: Attr = None
 
     def __getitem__(self, key):
         log.debug(f'[{key}] ——►')
@@ -273,33 +244,29 @@ class ClsdictProxy(dict):
         else: return super().__getitem__(key)
 
     def __setitem__(self, key, value):
-        log.debug(f'[{key}] ◄—— {value}')
+        log.debug(f"[{key}] ◄—— {value if not isinstance(value, Attr) else '<Attr object>'}")
         if not isMemberFunction(self, value) and not isDunderAttr(key):
             self.addAttr(key, value)
-        return super().__setitem__(key, value)
+        return super().__setitem__(key, value)  # TODO: If slots, don't set class variable
 
     def addAttr(self, attrname, value=Null):
         """ Set tag to attr: dunders and member methods are ignored """
-        # ▼ Assign tag
-        if self.currentTag is not None:
-            self.tags[self.currentTag].add(attrname)
+
+        # ▼ Assign tag  # NOTE: 'None' is a valid key now (to allow for an easy sample of all non-tagged attrs)
+        self.tags[self.currentTag].add(attrname)
 
         # ▼ Create Attr() from member variable if not already
         attr = value if isinstance(value, Attr) else Attr(value)
         attr.name = attrname
         attr.tag = self.currentTag
-        self.attrs.append(attr)
 
-        # ▼ Store current attr to allow spy to set type and avoid duplicates
+        self.attrs.append(attr)
         self.currentAttr = attr
 
     @legacy
     def set(self, key, value):
         """ __setitem__() for internal use """
         return super().__setitem__(key, value)
-
-    def resetTag(self):
-        self.currentTag = None
 
     def setNewTag(self, tagname):
         # ▼ check for duplicating section
@@ -320,33 +287,44 @@ class TaggedAttrsTitledType(type):
     __tags__ = {}
 
     @classmethod
-    def __prepare__(metacls, clsname, bases, enableAttrsTagging=True):
-        if enableAttrsTagging:
-            SECTION.proxy = ClsdictProxy()
-            return SECTION.proxy
+    def __prepare__(metacls, clsname, bases, enableClasstools=True):
+        if enableClasstools:
+            SectionTitle.proxy = ClsdictProxy()
+            return SectionTitle.proxy
         else: return {}
 
     def __new__(metacls, clsname, bases, clsdict, **kwargs):
-        args = (metacls, clsname, bases, clsdict)  # CONSIDER: should I explicitly do 'dict(clsdict)' here?
+
+        # ▼ Make attrs option descriptors work as expected
+        Attr.setupMode = False
+        Attr.resetDefaults()
 
         # ▼ Use tags that are already in clsdict if no parents found
         if hasattr(clsdict, 'tags') and bases:
-            # ▼ Collect all base class tags dicts + current class tags dict
-            tagsDicts = attachItem(filter(None, (parent.__dict__.get('__tags__') for parent in bases)), clsdict.tags)
+            clsdict['__tags__'] = metacls.mergeTags(bases, clsdict.tags)
 
-            # ▼ Take main parent's tags as base tags dict
-            try: newTags = clsdict['__tags__'] = tagsDicts.__next__().copy()
+        # ▼ CONSIDER: should I explicitly do 'dict(clsdict)' here?
+        return super().__new__(metacls, clsname, bases, clsdict)
 
-            # ▼ Use current tags if no single parent defines any
-            except StopIteration: return super().__new__(*args)
+    @staticmethod
+    def mergeTags(parents, currentTags):
+        # ▼ Collect all base class tags dicts + current class tags dict
+        tagsDicts = attachItem(filter(None, (parent.__dict__.get('__tags__') for parent in parents)), currentTags)
 
-            # ▼ Merge all tags by tag name
-            for tagsDict in tagsDicts:
-                reduce_items = ((tagname, newTags[tagname] | namesSet) for tagname, namesSet in tagsDict.items())
-                for _ in starmap(partial(setitem, newTags), reduce_items): pass
-        # TODO: cleanup Attr (reset defaults, for ex) not to disrupt future Attr class use
-        Attr.setupMode = False
-        return super().__new__(*args)
+        # ▼ Take main parent's tags as base tags dict
+        try: newTags = tagsDicts.__next__().copy()
+
+        # ▼ Use current tags if no single parent defines any
+        except StopIteration: return currentTags
+
+        # ▼ Merge all tags by tag name into 'newTags'
+        for tagsDict in tagsDicts:
+            reduceItems = ((tagname, newTags[tagname] | namesSet) for tagname, namesSet in tagsDict.items())
+            for _ in starmap(partial(setitem, newTags), reduceItems): pass
+            # TODO: Compare performance ▲ ▼, if negligible - replace with code below (more readable IMHO)
+            # for tagname, updatedNamesSet in reduceItems:
+            #     setitem(newTags, tagname, updatedNamesSet)
+        return newTags
 
 
 SECTION = SectionTitle()
@@ -361,3 +339,10 @@ class Tagged(TaggedType): pass
 
 if __name__ == '__main__':
     ...
+
+
+    class A(metaclass=TaggedType):
+        a = Attr(1, const=True)
+
+
+    a = A()
