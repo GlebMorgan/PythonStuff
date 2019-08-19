@@ -344,5 +344,4 @@ if __name__ == '__main__':
     class A(metaclass=TaggedType):
         a = Attr(1, const=True)
 
-
     a = A()
