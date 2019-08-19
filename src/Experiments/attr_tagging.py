@@ -25,6 +25,8 @@ def isClassVar(annotation: str) -> bool:
 
 
 def isMemberFunction(target: Dict, attr) -> bool:
+    # ▼ Avoid error due to Attr.setupMode
+    if hasattr(attr, __dict__) and attr.__dict__.get('__qualname__') is None: return False
     if not hasattr(attr, '__qualname__'): return False  # just optimization not to fetch class qualname
     return attr.__qualname__ == f"{target.get('__qualname__')}.{attr.__name__}"
 
@@ -134,9 +136,13 @@ class OptionFetcher:
 
 class Attr(OptionFetcher):
     """ Mutable default values must define .copy() method
-            Options are optional (heh), bla bla bla...
-                Syntax1: str = attr(default_value) .option1 .option2(parameter) .optionN
-                Syntax2: str = attr(default_value, opt1=True, opt2='par', opt3=True)
+            Syntax: (options are optional (heh), bla bla bla... )
+                • name1: type = attr(default_value) .option1 .option2('parameter') .optionN(whatever)
+                • name2: type = attr(default_value, option1=False, option2='parameter', optionN=whatever)
+        Supported options:
+            • 'const' — all attrs in current section will be immutable
+                        value may be changed though by accessing '_attrname_slot' attribute
+                        (it's Python, babie)
         TODO: Attr docstring
     """
 
@@ -166,7 +172,7 @@ class Attr(OptionFetcher):
 
 
 class SectionTitle(OptionFetcher):
-    """ New section marker. Tells ClsdictProxy when new tag is defined.
+    """ New section marker. Tells ClassdictProxy when new tag is defined.
         Syntax (expected within class body) (options can be omitted, if not required):
             • SECTION('tag_name', option1=par, optionN=True)
             • SECTION('tag_name') .option1(par) .optionN
@@ -178,7 +184,7 @@ class SectionTitle(OptionFetcher):
         TODO: finish SectionTitle docstring
     """
 
-    proxy: ClsdictProxy = None
+    proxy: ClassdictProxy = None
 
     def __getitem__(self, tagname: Optional[str], **options):
         # ▼ Reset tag
@@ -208,10 +214,13 @@ class SectionTitle(OptionFetcher):
 
 
 class AnnotationProxy:
+    """ Non-annotated attrs are not processed due to Python' method bounding freedom
+        ... TODO
+    """
     # CONSIDER: add annotation-only attrs to cls.__attrs__ later, along with setting attr.type;
     #           may be problematic since OrderedSet seems incapable of inserting an item in the middle...
     def __init__(self, proxy):
-        self.owner: ClsdictProxy = proxy
+        self.owner: ClassdictProxy = proxy
 
     def __setitem__(self, attrname, value):
         log.debug(f'[__annotations__][{attrname}] ◄—— {value}')
@@ -226,7 +235,7 @@ class AnnotationProxy:
 
 
 
-class ClsdictProxy(dict):
+class ClassdictProxy(dict):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -289,7 +298,7 @@ class TaggedAttrsTitledType(type):
     @classmethod
     def __prepare__(metacls, clsname, bases, enableClasstools=True):
         if enableClasstools:
-            SectionTitle.proxy = ClsdictProxy()
+            SectionTitle.proxy = ClassdictProxy()
             return SectionTitle.proxy
         else: return {}
 
@@ -339,7 +348,6 @@ class Tagged(TaggedType): pass
 
 if __name__ == '__main__':
     ...
-
 
     class A(metaclass=TaggedType):
         a = Attr(1, const=True)
