@@ -553,6 +553,8 @@ def listAttrs(obj, invoke=False, limit: int = None):
 
 
 def attachItem(iterable: Iterable, append=Null, prepend=Null):
+    # TODO: analyze first and second arguments' types and provide a clean seamless signature
+    #           (prepend, iterable, append) or (iterable, append) or (prepend, iterable) with no keyword arguments
     """ Attach one item to an iterable (before or/and after) and return resulting extended generator """
     if prepend is not Null: yield prepend
     yield from iterable
