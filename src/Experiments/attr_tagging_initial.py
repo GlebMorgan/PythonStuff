@@ -287,7 +287,7 @@ class InjectedSlotsType(ClassModifier):
                 iterable=filter(None, (parent.__dict__.get('_defaults_') for parent in reversed(bases))),
                 append=currentDefaults
         )
-        newDefaults = dicts.__next__()
+        newDefaults = dicts.__next__().copy()
         for defaults in dicts: newDefaults.update(defaults)
         return newDefaults
 

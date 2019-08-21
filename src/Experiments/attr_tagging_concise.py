@@ -5,7 +5,7 @@ from operator import setitem
 from typing import Any, ClassVar, NamedTuple, Union, Dict, Optional
 
 from orderedset import OrderedSet
-from Utils import auto_repr, Null, Logger, attachItem
+from Utils import auto_repr, Null, Logger, attachItem, formatDict
 
 __options__ = 'tag', 'const', 'lazy'
 
@@ -71,8 +71,7 @@ class AnnotationProxy:
 
         # ▼ Create Attr() if variable was declared using just name and annotation
         if attr.name != attrname:
-            attr = Attr(None) if AUTO_INIT else Attr()
-        attr.name = attrname
+            attr = Attr(attrname, None) if AUTO_INIT else Attr(attrname)
         attr.type = annotation
 
         # ▼ Set options if not defined earlier by option definition objects
@@ -120,33 +119,36 @@ class ClassDictProxy(dict):
 
         # ▼ Set current attr (create one, if not already)
         if isinstance(value, Attr):
+            value.name = key
             self.currentAttr = value
             value = value.default
-        else: self.currentAttr = Attr(value)
+        else: self.currentAttr = Attr(key, value)
 
         # ▼ Avoid creating conflicting class attr, if injecting slots
         if not self.injectSlots:
-            return super().__setitem__(key, value.default)
+            return super().__setitem__(key, value)
 
     def resetOptions(self):
         self.currentOptions.update({option.name: option.default for option in (tag, const, lazy)})
 
 
 class Attr:
-    """ Options must have bool values (no 'None's or whatever)
+    """
         ... TODO
     """
 
     __slots__ = 'name', 'default', 'type', 'tag', 'const', 'lazy'
 
-    def __init__(self, value=Null):
+    def __init__(self, name=Null, value=Null):
+        if name is not Null: self.name = name
         self.default = value
+        # FIXME: ASSIGN DEFAULT OPTION HERE!!!
 
     def __str__(self):
         return f"Attr '{self.name}' [{self.default}] <{self.type}> ⚑{self.tag}" \
                f"{' 🔒'*self.const}{' 🕓'*self.lazy}"
 
-    def __repr__(self): auto_repr(self, self.name)
+    def __repr__(self): return auto_repr(self, self.name)
 
 
 class Section:
@@ -199,7 +201,7 @@ class Option:
         # ▼ Else, convert value to Attr() and apply option to it
         else:
             if not isinstance(value, Attr):
-                value = Attr(value)
+                value = Attr(value=value)
             setattr(value, self.name, self.value)
 
         # ▼ Reset value if altered by modifiers
@@ -232,28 +234,26 @@ class TaggedAttrsTitledType(type):
             even if they are assigned not using 'def'
     """
 
-    __tags__ = {}
+    # __tags__ = {}  # FIXME: move this to cls.__new__ !
+    # __attrs__ = {}  # FIXME: move this to cls.__new__ !
 
     # TODO: Make revision of all this class
 
     @classmethod
     def __prepare__(metacls, clsname, bases, enableClasstools=True):
         if enableClasstools:
-            proxy = ClassDictProxy()
-            Section.proxy = proxy
+            proxy = Section.proxy = ClassDictProxy()
             return proxy
-        else: return {}
+        else:
+            return {}
 
     @activateSetupMode
-    def __new__(metacls, clsname, bases, clsdict, **kwargs):
-
-        # ▼ Make attrs option descriptors work as expected
-        Attr.setupMode = False
-        Attr.resetDefaults()
+    def __new__(metacls, clsname, bases, clsdict: Union[ClassDictProxy, dict], **kwargs):
 
         # ▼ Use tags that are already in clsdict if no parents found
         if hasattr(clsdict, 'tags') and bases:
             clsdict['__tags__'] = metacls.mergeTags(bases, clsdict.tags)
+            clsdict['__attrs__'] = metacls.mergeParentDicts(bases, '__attrs__', clsdict.attrs)
 
         # ▼ CONSIDER: should I explicitly do 'dict(clsdict)' here?
         return super().__new__(metacls, clsname, bases, clsdict)
@@ -278,21 +278,27 @@ class TaggedAttrsTitledType(type):
             #     setitem(newTags, tagname, updatedNamesSet)
         return newTags
 
+    @staticmethod
+    def mergeParentDicts(parents, dictName, currentDict):
+        dicts = attachItem(
+                filter(None, (parent.__dict__.get(dictName) for parent in reversed(parents))), currentDict)
+        newDict = dicts.__next__().copy()
+        for attrDict in dicts: newDict.update(attrDict)
+        return newDict
 
 
 tag = Option('tag', default=None, flag=False)
 const = Option('const', default=False, flag=True)
 lazy = Option('lazy', default=False, flag=None)
 
-"""
-If adding new option, add it to:
-    1) Option() objects above
-    2) __options__ global variable
-    3) Attr.__slots__ ('..., *__options__' is not used there 
-        because PyCharm fails to resolve attributes that way round)
-    4) Attr.__str__ option icons
-    5) Attr() initialization in AnnotationProxy.__setitem__
-"""
+# If adding new option, add it to:
+#     1) Option() objects above
+#     2) __options__ global variable
+#     3) Attr.__slots__ ('..., *__options__' is not used there
+#         because PyCharm fails to resolve attributes that way round)
+#     4) Attr.__str__ option icons
+#     5) Attr() initialization in AnnotationProxy.__setitem__
+#     6) ClassDictProxy.resetOptions() options list
 
 OPTIONS = Section()
 TAG = Section()
@@ -303,6 +309,15 @@ TAG = Section()
 
 
 if __name__ == '__main__':
+
+
+    class A(metaclass=TaggedAttrsTitledType):
+        a: int = 4
+
+    print(formatDict(A.__attrs__))
+    print(A.__tags__)
+    print(A().a)
+    exit()
 
     from contextlib import contextmanager
 
