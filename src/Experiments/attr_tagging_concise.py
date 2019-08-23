@@ -1,3 +1,5 @@
+from __future__ import annotations as annotations_feature
+
 from collections import defaultdict
 from functools import partial
 from itertools import starmap
@@ -58,8 +60,8 @@ class AnnotationProxy:
     """
     # CONSIDER: add annotation-only attrs to cls.__attrs__ later, along with setting attr.type;
     #           may be problematic since OrderedSet seems incapable of inserting an item in the middle...
-    def __init__(self, proxy):
-        self.owner: ClassDictProxy = proxy
+    def __init__(self, classdict):
+        self.owner: ClassDictProxy = classdict
 
     def __setitem__(self, attrname, annotation):
         log.debug(f'[__annotations__][{attrname}] ◄—— {annotation}')
@@ -75,9 +77,9 @@ class AnnotationProxy:
         attr.type = annotation
 
         # ▼ Set options if not defined earlier by option definition objects
-        for option in ('tag', 'const', 'lazy'):
-            if not hasattr(self, option):
-                setattr(self, option, self.owner.currentOptions[option])
+        for option in (__options__):
+            if not hasattr(attr, option):
+                setattr(attr, option, self.owner.currentOptions[option])
 
         # NOTE: 'None' is a valid tag key (to allow for an easy sample of all non-tagged attrs)
         self.owner.tags[attr.tag].add(attrname)
@@ -120,7 +122,7 @@ class ClassDictProxy(dict):
         # ▼ Set current attr (create one, if not already)
         if isinstance(value, Attr):
             value.name = key
-            self.currentAttr = value
+            self.currentAttr = value  # TODO: make sure this .currentAttr is annotated!
             value = value.default
         else: self.currentAttr = Attr(key, value)
 
@@ -136,29 +138,50 @@ class Attr:
     """
         ... TODO
     """
-
+    # ▼ ' ... , *__options__' is not used here because PyCharm fails to resolve attributes this way round
     __slots__ = 'name', 'default', 'type', 'tag', 'const', 'lazy'
+
+    classdict: ClassDictProxy = None
 
     def __init__(self, name=Null, value=Null):
         if name is not Null: self.name = name
         self.default = value
+        # for option in __options__:
+        #     setattr(self, option, classdict.currentOptions[option])
         # FIXME: ASSIGN DEFAULT OPTION HERE!!!
 
     def __str__(self):
-        return f"Attr '{self.name}' [{self.default}] <{self.type}> ⚑{self.tag}" \
-               f"{' 🔒'*self.const}{' 🕓'*self.lazy}"
+        return f"Attr '{self.name}' [{self.default}] <{self.type}>" \
+               f"{f' ⚑{self.tag}'*(self.tag is not None)}{' 🔒'*self.const}{' 🕓'*(self.lazy is not False)}"
 
     def __repr__(self): return auto_repr(self, self.name)
+
+    @property
+    def options(self):
+        return {name: getattr(self, name) for name in __options__}
 
 
 class Section:
 
-    proxy: ClassDictProxy = None
+    classdict: ClassDictProxy = None
+
+    def __init__(self, sectionType: str = None):
+        self.type = sectionType
 
     def __enter__(self): pass
 
     def __exit__(self, *args):
-        self.proxy.resetOptions()
+        self.classdict.resetOptions()
+
+    def __call__(self, *args):
+        if self.type == 'tagger':
+            if not 0 < len(args) < 2:
+                raise TypeError(f"Section '{self.type}' requires single argument: 'tag'")
+            self.classdict.currentOptions['tag'] = args[0]
+        else: raise CodeDesignError("Section does not support arguments")
+        return self
+
+
 
 
 
@@ -174,14 +197,17 @@ class Option:
             flag=False – option stores a value, that must be provided as an argument
             flag=None  – option stores a value, but argument could be omitted
                             (.default will be used as a value in this case)
+        TODO: add option icons to documetation
     """
 
-    __slots__ = 'name', 'value', 'state', 'default', 'flag'
+    __slots__ = 'name', 'default', 'flag', 'incompatibles', 'value'
 
-    def __init__(self, name, *, default, flag: Union[bool, None]):
+    def __init__(self, name, *, default, flag: Union[bool, None], hates=None):
         self.name = name
-        self.default = default  # default value, <bool> if .type=True
+        self.default = default  # default value, <bool> if .type == True
         self.flag = flag  # require, allow or deny argument
+        # TODO: Option.incompatibles (on demand)
+        self.incompatibles = hates  # option(s) that cannot be applied before current one
         # ▼ Stores current value (changed by modifiers, reset after applying to attr)
         self.value = Null
 
@@ -190,13 +216,13 @@ class Option:
         # ▼ Set .value to appropriate default if option used with no modifiers
         if self.value is Null:
             if self.flag is False:
-                raise CodeDesignError(f"Option {self.name} requires an argument")
+                raise CodeDesignError(f"Option '{self.name}' requires an argument")
             else:
                 self.value = True if self.flag is True else self.default
 
-        # ▼ If applied to Section, change section-common defaults via Section.proxy
+        # ▼ If applied to Section, change section-common defaults via Section.classdict
         if isinstance(value, Section):
-            self.value.proxy.currentOptions[self.name] = self.value
+            value.classdict.currentOptions[self.name] = self.value
 
         # ▼ Else, convert value to Attr() and apply option to it
         else:
@@ -211,6 +237,7 @@ class Option:
     def __call__(self, arg):
         if self.flag is True:
             raise CodeDesignError(f"Option {self.name} is not callable")
+        # TODO: check argument type
         self.value = arg
         return self
 
@@ -220,6 +247,8 @@ class Option:
         # NOTE: disabling an option with assigned argument will reset it
         self.value = False if self.flag is True else None
         return self
+
+    def __repr__(self): return auto_repr(self, f'{self.name}')
 
     def denyAttrAccess(self, name, value):
         raise AttributeError(f"'{self.name}' object is not intended to use beyond documented syntax")
@@ -242,7 +271,7 @@ class TaggedAttrsTitledType(type):
     @classmethod
     def __prepare__(metacls, clsname, bases, enableClasstools=True):
         if enableClasstools:
-            proxy = Section.proxy = ClassDictProxy()
+            proxy = Section.classdict = Attr.classdict = ClassDictProxy()
             return proxy
         else:
             return {}
@@ -289,19 +318,19 @@ class TaggedAttrsTitledType(type):
 
 tag = Option('tag', default=None, flag=False)
 const = Option('const', default=False, flag=True)
-lazy = Option('lazy', default=False, flag=None)
+lazy = Option('lazy', default=False, flag=False)
 
+# TODO: review this in the end
 # If adding new option, add it to:
 #     1) Option() objects above
 #     2) __options__ global variable
-#     3) Attr.__slots__ ('..., *__options__' is not used there
-#         because PyCharm fails to resolve attributes that way round)
+#     3) Attr.__slots__
 #     4) Attr.__str__ option icons
-#     5) Attr() initialization in AnnotationProxy.__setitem__
-#     6) ClassDictProxy.resetOptions() options list
+#     6) ClassDictProxy.resetOptions()
+#     7) Option __doc__
 
 OPTIONS = Section()
-TAG = Section()
+TAG = Section('tagger')
 
 
 
@@ -312,11 +341,21 @@ if __name__ == '__main__':
 
 
     class A(metaclass=TaggedAttrsTitledType):
-        a: int = 4
+        a: int = 4 |tag("test") |lazy('set_a') |const
+
+        # with OPTIONS |lazy('tag_setter'):
+        #     b: str
+        #     c: int = 0 |const
+
+        with TAG('tag') |lazy('tag_setter'):
+            b: str = 'loool'
+            c: int = 0 |const
 
     print(formatDict(A.__attrs__))
     print(A.__tags__)
     print(A().a)
+    print(A().b)
+    print(A().c)
     exit()
 
     from contextlib import contextmanager
