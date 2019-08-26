@@ -4,185 +4,155 @@ from collections import defaultdict
 from functools import partial
 from itertools import starmap
 from operator import setitem
-from typing import Any, ClassVar, NamedTuple, Union, Dict, Optional
+from typing import Any, ClassVar, Union, Dict
 
+from Utils import auto_repr, Null, Logger, attachItem, formatDict, legacy
 from orderedset import OrderedSet
-from Utils import auto_repr, Null, Logger, attachItem, formatDict
 
 __options__ = 'tag', 'const', 'lazy'
 
-# ▼ TODO: Elaborate this, maybe, even add kind of check in ClassDictProxy.__setitem__
-# ▼ ONLY Attr() objects may be assigned to variables inside user class definition!
 __all__ = 'Attr', 'TAG', 'OPTIONS', *__options__
 
-log = Logger('AttrTagging')
+log = Logger('Classtools')
 log.setLevel('INFO')
 
 
-# CONSIDER: __all__ = tag, const, lazy, TAG, OPTIONS
 # TODO: check for duplicating tags inside TAG SectionTitle object (store list of used tags and compare on __call__())
-# TODO: store attrs in dict {name: Attr()} instead of list
 
 # GENERAL CONFIG:
 
 # Add option definition objects (those used with '|option' syntax) to class dict
 # to make their names available (only) inside class body, thus avoiding extra imports
 # These objects will be removed from class dict as soon as class statement is fully executed
-INJECT_OPTIONS = True
+INJECT_OPTIONS = False
 
-# Auto-initialize all annotated attrs without assignment with None value
-AUTO_INIT = False
-
-
-# NOTE: always deny non-annotated attrs for now
+# CONSIDER: always deny non-annotated attrs for now
 # Raise error if non-function attr is declared without annotation,
 # else — treat non-annotated attrs as class attrs (do not process them with class tools routine)
 # Note: non-annotated attrs inside SECTION blocks are not allowed
 DENY_BARE_ATTRS = False
 
 
-class CodeDesignError(TypeError):
+class ClasstoolsError(RuntimeError):
     """ Error: class is used incorrectly by higher-level code """
 
 
-def activateSetupMode(function):
+# TODO: disallow attribute setting from inside class body, but allow inside this module
+@legacy
+def setupMode(function):
     def setupModeWrapper(*args, **kwargs):
-        Option.__setattr__ = Option.denyAttrAccess
-        result = function(*args, **kwargs)
         Option.__setattr__ = object.__setattr__
+        result = function(*args, **kwargs)
+        Option.__setattr__ = Option.denyAttrAccess
         return result
     return setupModeWrapper
 
 
-class AnnotationProxy:
-    """ Non-annotated attrs are not processed due to Python' method bounding freedom
+class AnnotationSpy(dict):
+    """
         ... TODO
     """
-    # CONSIDER: add annotation-only attrs to cls.__attrs__ later, along with setting attr.type;
-    #           may be problematic since OrderedSet seems incapable of inserting an item in the middle...
-    def __init__(self, classdict):
-        self.owner: ClassDictProxy = classdict
+
+    def __init__(self, metaclass):
+        self.owner: ClasstoolsType = metaclass
+        super().__init__()
 
     def __setitem__(self, attrname, annotation):
         log.debug(f'[__annotations__][{attrname}] ◄—— {annotation}')
 
         # ▼ Put annotation on its place
-        self.owner.annotations[attrname] = annotation
+        super().__setitem__(attrname, annotation)
 
-        attr = self.owner.currentAttr
+        default = None if self.owner.autoinit else Null
 
-        # ▼ Create Attr() if variable was declared using just name and annotation
-        if attr.name != attrname:
-            attr = Attr(attrname, None) if AUTO_INIT else Attr(attrname)
+        # ▼ If slots are injected, remove conflicting class variable
+        if self.owner.injectSlots:
+            value = self.owner.clsdict.pop(attrname, default)
+        else:
+            value = self.owner.clsdict.get(attrname, default)
+
+        # ▼ Skip dunder attrs
+        if attrname.startswith('__') and attrname.endswith('__'):
+            # TODO
+            return
+
+        # ▼ Skip and remove ignored attrs from class dict
+        if value is Attr.IGNORE:
+            del self.owner.clsdict[attrname]
+            return
+
+        if isinstance(value, Attr):
+            attr = value
+            attr.name = attrname
+            if not self.owner.injectSlots:
+                # ▼ Replace class variable with default value
+                self.owner.clsdict[attrname] = attr.default
+        # ▼ Create Attr() even if variable had no value assigned
+        else: attr = Attr(attrname, value)
+
+        # CONSIDER: ▼ parse annotations correctly (use module or smth)
+        # ▼ Set attr as classvar, if that's the case
+        if annotation.startswith('ClassVar'):
+            attr.classvar = True
+            annotation = annotation.strip('ClassVar')
+            # ▼ NOTE: if annotation was just 'ClassVar' with no generics, type will be ''
+            if annotation.startswith('[') and annotation.endswith(']'):
+                annotation = annotation[1:-1]
+        else:
+            attr.classvar = False
+
+        # ▼ Apply type with removed ClassVar, if that's the case
         attr.type = annotation
 
-        # ▼ Set options if not defined earlier by option definition objects
+        # ▼ Set options which was not defined earlier by option definition objects
         for option in (__options__):
             if not hasattr(attr, option):
                 setattr(attr, option, self.owner.currentOptions[option])
 
         # NOTE: 'None' is a valid tag key (to allow for an easy sample of all non-tagged attrs)
         self.owner.tags[attr.tag].add(attrname)
-
         self.owner.attrs[attrname] = attr
 
 
-class ClassDictProxy(dict):
-    """ Non-annotated attrs are not processed outside SECTION
-        ... TODO
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        self.tags: defaultdict = self.setdefault('__tags__', defaultdict(OrderedSet))
-        self.attrs: dict = self.setdefault('__attrs__', {})
-        self.annotations: dict = self.setdefault('__annotations__', {})
-
-        self.spy = AnnotationProxy(self)
-        self.injectSlots = False  # TODO: Fetch this from outside
-        self.currentOptions: Dict[str, Any] = {}
-        self.currentAttr: Attr = None
-
-        # ▼ Initialize options
-        self.resetOptions()
-
-    def __getitem__(self, key):
-        log.debug(f'[{key}] ——►')
-        if key == '__annotations__': return self.spy
-        else: return super().__getitem__(key)
-
-    def __setitem__(self, key, value):
-        log.debug(f"[{key}] ◄—— {value if not isinstance(value, Attr) else f'<Attr object {value.default}>'}")
-
-        # ▼ Skip dunder attrs pass Attr mechanics
-        if key.startswith('__') and key.endswith('__'):
-            return super().__setitem__(key, value)
-
-        # ▼ Set current attr (create one, if not already)
-        if isinstance(value, Attr):
-            value.name = key
-            self.currentAttr = value  # TODO: make sure this .currentAttr is annotated!
-            value = value.default
-        else: self.currentAttr = Attr(key, value)
-
-        # ▼ Avoid creating conflicting class attr, if injecting slots
-        if not self.injectSlots:
-            return super().__setitem__(key, value)
-
-    def resetOptions(self):
-        self.currentOptions.update({option.name: option.default for option in (tag, const, lazy)})
+    def setitem(self, key, value):
+        """ __setitem__ for internal use """
+        return super().__setitem__(key, value)
 
 
 class Attr:
     """
+        Attrs objects are created from all ANNOTATED variables defined inside class body
+            Exceptions are:
+                • __service_var__ = smth  – dunder variables
+                • var: type = Attr.ignore – explicitly marked to be ignored
+            ...
         ... TODO
     """
+
     # ▼ ' ... , *__options__' is not used here because PyCharm fails to resolve attributes this way round
-    __slots__ = 'name', 'default', 'type', 'tag', 'const', 'lazy'
+    __slots__ = 'name', 'default', 'type', 'classvar', 'tag', 'const', 'lazy'
 
-    classdict: ClassDictProxy = None
+    IGNORE = type("IGNOREMARKER", (), {})()
 
-    def __init__(self, name=Null, value=Null):
+    def __init__(self, name=Null, value=Null, vartype=Null):
         if name is not Null: self.name = name
         self.default = value
-        # for option in __options__:
-        #     setattr(self, option, classdict.currentOptions[option])
-        # FIXME: ASSIGN DEFAULT OPTION HERE!!!
+        self.type = vartype
 
     def __str__(self):
         return f"Attr '{self.name}' [{self.default}] <{self.type}>" \
-               f"{f' ⚑{self.tag}'*(self.tag is not None)}{' 🔒'*self.const}{' 🕓'*(self.lazy is not False)}"
+               f"{' C'*self.classvar}{f' ⚑{self.tag}'*(self.tag is not None)}" \
+               f"{' 🔒'*self.const}{' 🕓'*(self.lazy is not False)}"
 
     def __repr__(self): return auto_repr(self, self.name)
 
+    def __neg__(self): return self.IGNORE
+
     @property
-    def options(self):
-        return {name: getattr(self, name) for name in __options__}
+    def options(self): return {name: getattr(self, name) for name in __options__}
 
-
-class Section:
-
-    classdict: ClassDictProxy = None
-
-    def __init__(self, sectionType: str = None):
-        self.type = sectionType
-
-    def __enter__(self): pass
-
-    def __exit__(self, *args):
-        self.classdict.resetOptions()
-
-    def __call__(self, *args):
-        if self.type == 'tagger':
-            if not 0 < len(args) < 2:
-                raise TypeError(f"Section '{self.type}' requires single argument: 'tag'")
-            self.classdict.currentOptions['tag'] = args[0]
-        else: raise CodeDesignError("Section does not support arguments")
-        return self
-
-
-
+    @classmethod
+    def ignore(cls): return cls.IGNORE
 
 
 class Option:
@@ -197,7 +167,7 @@ class Option:
             flag=False – option stores a value, that must be provided as an argument
             flag=None  – option stores a value, but argument could be omitted
                             (.default will be used as a value in this case)
-        TODO: add option icons to documetation
+        TODO: add option icons to documentation
     """
 
     __slots__ = 'name', 'default', 'flag', 'incompatibles', 'value'
@@ -206,7 +176,7 @@ class Option:
         self.name = name
         self.default = default  # default value, <bool> if .type == True
         self.flag = flag  # require, allow or deny argument
-        # TODO: Option.incompatibles (on demand)
+        # ▼ TODO: Option.incompatibles (on demand)
         self.incompatibles = hates  # option(s) that cannot be applied before current one
         # ▼ Stores current value (changed by modifiers, reset after applying to attr)
         self.value = Null
@@ -216,13 +186,13 @@ class Option:
         # ▼ Set .value to appropriate default if option used with no modifiers
         if self.value is Null:
             if self.flag is False:
-                raise CodeDesignError(f"Option '{self.name}' requires an argument")
+                raise ClasstoolsError(f"Option '{self.name}' requires an argument")
             else:
                 self.value = True if self.flag is True else self.default
 
         # ▼ If applied to Section, change section-common defaults via Section.classdict
         if isinstance(value, Section):
-            value.classdict.currentOptions[self.name] = self.value
+            value.metaclass.currentOptions[self.name] = self.value
 
         # ▼ Else, convert value to Attr() and apply option to it
         else:
@@ -236,14 +206,12 @@ class Option:
 
     def __call__(self, arg):
         if self.flag is True:
-            raise CodeDesignError(f"Option {self.name} is not callable")
+            raise ClasstoolsError(f"Option {self.name} is not callable")
         # TODO: check argument type
         self.value = arg
         return self
 
     def __neg__(self):
-        # CONSIDER: isinstance(False, int) is True,
-        #   so care should be taken if 'int' options would be created in future
         # NOTE: disabling an option with assigned argument will reset it
         self.value = False if self.flag is True else None
         return self
@@ -254,38 +222,67 @@ class Option:
         raise AttributeError(f"'{self.name}' object is not intended to use beyond documented syntax")
 
 
-class TaggedAttrsTitledType(type):
-    """ TODO: TaggedAttrsTitledType docstring
+class ClasstoolsType(type):  # CONSIDER: Classtools
+    """ TODO: ClasstoolsType docstring
         Variables defined without annotations are not tagged
         SECTION without any attrs inside is not created
         Tag names are case-insensitive
         Member methods (class is direct parent in __qualname__) are not tagged,
             even if they are assigned not using 'def'
+        • slots ——► auto inject slots from __attrs__
+        • init ——► auto-initialize all __attrs__ defaults to 'None'
     """
 
     # __tags__ = {}  # FIXME: move this to cls.__new__ !
     # __attrs__ = {}  # FIXME: move this to cls.__new__ !
 
-    # TODO: Make revision of all this class
+    currentOptions: Dict[str, Any] = {}
+    clsdict = {}
+
 
     @classmethod
-    def __prepare__(metacls, clsname, bases, enableClasstools=True):
-        if enableClasstools:
-            proxy = Section.classdict = Attr.classdict = ClassDictProxy()
-            return proxy
-        else:
-            return {}
+    def __prepare__(metacls, clsname, bases, enable=True, slots=False, init=False):
+        if enable is False: return {}
 
-    @activateSetupMode
-    def __new__(metacls, clsname, bases, clsdict: Union[ClassDictProxy, dict], **kwargs):
+        metacls.injectSlots = slots
+        metacls.autoinit = init
 
-        # ▼ Use tags that are already in clsdict if no parents found
-        if hasattr(clsdict, 'tags') and bases:
-            clsdict['__tags__'] = metacls.mergeTags(bases, clsdict.tags)
-            clsdict['__attrs__'] = metacls.mergeParentDicts(bases, '__attrs__', clsdict.attrs)
+        metacls.tags: defaultdict = metacls.clsdict.setdefault('__tags__', defaultdict(OrderedSet))
+        metacls.attrs: dict = metacls.clsdict.setdefault('__attrs__', {})
+        metacls.annotations: dict = metacls.clsdict.setdefault('__annotations__', AnnotationSpy(metacls))
 
-        # ▼ CONSIDER: should I explicitly do 'dict(clsdict)' here?
-        return super().__new__(metacls, clsname, bases, clsdict)
+        # ▼ Initialize options
+        metacls.resetOptions()
+
+        if INJECT_OPTIONS:  # TESTME
+            # ▼ TODO: adjustable names below
+            metacls.clsdict['tag'] = tag
+            metacls.clsdict['const'] = const
+            metacls.clsdict['lazy'] = lazy
+
+        return metacls.clsdict
+
+    def __new__(metacls, clsname, bases, clsdict: dict, **kwargs):
+
+        newClass = super().__new__(metacls, clsname, bases, clsdict)
+
+        # ▼ Use tags and attrs that are already in clsdict if no parents found
+        if hasattr(metacls, 'clsdict') and bases:
+            newClass.__tags__ = metacls.mergeTags(bases, metacls.tags)
+            newClass.__attrs__ = metacls.mergeParentDicts(bases, '__attrs__', metacls.attrs)
+
+        # ▼ Verify no explicit/implicit Attr() was assigned to non-annotated variable
+        for attr, value in clsdict.items():
+            if isinstance(value, Attr):
+                raise ClasstoolsError(f"Attr '{attr}' is used without type annotation!")
+
+        # CONSIDER: defaults for slots could be taken from __attrs__
+
+        # ▼ Convert annotation spy to normal dict
+        newClass.__annotations__ = dict(metacls.annotations)
+
+        return newClass
+
 
     @staticmethod
     def mergeTags(parents, currentTags):
@@ -315,7 +312,34 @@ class TaggedAttrsTitledType(type):
         for attrDict in dicts: newDict.update(attrDict)
         return newDict
 
+    @classmethod
+    def resetOptions(metacls):
+        metacls.currentOptions.update({option.name: option.default for option in (tag, const, lazy)})
+        # CONSIDER: unresolved attr .currentOptions? Why?
 
+
+class Section:
+
+    metaclass = ClasstoolsType
+
+    def __init__(self, sectionType: str = None):
+        self.type = sectionType
+
+    def __enter__(self): pass
+
+    def __exit__(self, *args):
+        self.metaclass.resetOptions()
+
+    def __call__(self, *args):
+        if self.type == 'tagger':
+            if len(args) != 1:
+                raise TypeError(f"Section '{self.type}' requires single argument: 'tag'")
+            self.metaclass.currentOptions['tag'] = args[0]
+        else: raise ClasstoolsError("Section does not support arguments")
+        return self
+
+
+# TODO: Move all options to options.py, define __all__ there and import options as 'from options import *'
 tag = Option('tag', default=None, flag=False)
 const = Option('const', default=False, flag=True)
 lazy = Option('lazy', default=False, flag=False)
@@ -327,32 +351,38 @@ lazy = Option('lazy', default=False, flag=False)
 #     3) Attr.__slots__
 #     4) Attr.__str__ option icons
 #     6) ClassDictProxy.resetOptions()
-#     7) Option __doc__
+#     7) ClassDict name injections in ClasstoolsType.__prepare__
+#     8) Option __doc__
 
 OPTIONS = Section()
 TAG = Section('tagger')
 
 
 
+# CONSIDER: ALWAYS CREATE ATTRS FROM ANNOTATED VARIABLES DEFINED IN CLASS BODY, NEVER USE ATTR THERE INSTEAD
 
 
 
 if __name__ == '__main__':
 
 
-    class A(metaclass=TaggedAttrsTitledType):
-        a: int = 4 |tag("test") |lazy('set_a') |const
+    class A(metaclass=ClasstoolsType):
 
-        # with OPTIONS |lazy('tag_setter'):
-        #     b: str
-        #     c: int = 0 |const
+        a0: str = -Attr()
+        a: int = 4 |tag("test") |lazy('set_a') |const
+        c: Any = 3
+
+        with OPTIONS |lazy('tag_setter'):
+            e: str
+            f: int = 0 |const
 
         with TAG('tag') |lazy('tag_setter'):
             b: str = 'loool'
-            c: int = 0 |const
+            d: int = 0 |const
 
     print(formatDict(A.__attrs__))
-    print(A.__tags__)
+    print(formatDict(A.__tags__))
+    print(formatDict(A.__dict__))
     print(A().a)
     print(A().b)
     print(A().c)
