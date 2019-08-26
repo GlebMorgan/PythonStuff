@@ -192,13 +192,13 @@ def legacy(legacy_entity):
     if (type(legacy_entity) == type):
         new_cls = type(f"old_{legacy_entity.__name__}", legacy_entity.__bases__, dict(legacy_entity.__dict__))
         new_cls.__legacy = True
+        print(f"!!! Class '{legacy_entity.__name__}' is tagged as legacy !!!")
         return new_cls
     else:
         @wraps(legacy_entity)
         def funWrapper(*args, **kwargs):
-            print("!!! Function is tagged as legacy !!!")
+            print(f"!!! Function '{legacy_entity.__name__}' is tagged as legacy !!!")
             return legacy_entity(*args, **kwargs)
-
         funWrapper.__name__ = f"old_{funWrapper.__name__}"
         funWrapper.legacy = True
         return funWrapper
