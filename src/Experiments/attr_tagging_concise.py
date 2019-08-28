@@ -12,13 +12,40 @@ from orderedset import OrderedSet
 
 __options__ = 'tag', 'const', 'lazy'
 
-__all__ = 'Attr', 'TAG', 'OPTIONS', *__options__
+__all__ = 'attr', 'TAG', 'OPTIONS', *__options__
 
 log = Logger('Classtools')
 log.setLevel('INFO')
 
+# FIXME: options state is saved until ror is called, no control over separate option setup and its application to attr
 
-# TODO: check for duplicating tags inside TAG SectionTitle object (store list of used tags and compare on __call__())
+# TODO: disallow Option attribute setting from inside class body, but allow inside this module
+
+# TODO: validate option argument when implementing necessary adjustments to attr (i.e. when using that argument)
+
+# TODO: Attr(default, **options) attr definition syntax
+
+# TODO: Section['arg'] syntax
+
+# TODO: inject slots, const and lazy implementations
+
+# TODO: document all this stuff!
+
+# CONSIDER: factory option: is it needed?
+
+# CONSIDER: rename __tags__ ——► _tags_ (may break some dunder checks, needs investigation)
+
+# CONSIDER: create a __owner__ variable in metaclass referencing to outer class, in which current class is defined;
+#           this way inner classes and variables may be visible in child class, which is always very convenient
+
+# CONSIDER: implement lookups diving into mro classes when searching for __tags__ and __attrs__ to initialize slots
+#           just like normal attrs lookup is performed instead of creating cumulative dicts in each class
+
+# CONSIDER: test pickling
+
+
+# ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
+
 
 # GENERAL CONFIG:
 
@@ -51,14 +78,13 @@ class ClasstoolsError(RuntimeError):
     """ Error: class is used incorrectly by higher-level code """
 
 
-# TODO: disallow attribute setting from inside class body, but allow inside this module
-@legacy
 def setupMode(function):
-    def setupModeWrapper(*args, **kwargs):
-        Option.__setattr__ = object.__setattr__
-        result = function(*args, **kwargs)
-        Option.__setattr__ = Option.denyAttrAccess
+    def setupModeWrapper(self, *args, **kwargs):
+        self.__class__.__setattr__ = super(self.__class__, self).__class__.__setattr__
+        result = function(self, *args, **kwargs)
+        self.__class__.__setattr__ = self.__class__.denyAttrAccess
         return result
+
     return setupModeWrapper
 
 
@@ -78,6 +104,11 @@ class AnnotationSpy(dict):
         default = None if self.owner.autoInit else Null
         var = clsdict.get(attrname, default)
 
+        # ▼ Deny non-string annotations
+        if not isinstance(annotation, str):
+            raise ClasstoolsError(f"Attr '{attrname}': annotation must be a string; "
+                                  f"use quotes or 'from __future__ import annotations'")
+
         # ▼ Skip dunder attrs, if configured accordingly
         if not ALLOW_DUNDER_ATTRS:
             if attrname.startswith('__') and attrname.endswith('__'):
@@ -91,7 +122,8 @@ class AnnotationSpy(dict):
         if var is Attr.IGNORED:
             del clsdict[attrname]
             if annotation == ATTR_ANNOTATION:
-                raise ClasstoolsError(f"Cannot use '{ATTR_ANNOTATION}' annotation with ignored attrs")
+                raise ClasstoolsError(f"Attr '{attrname}': cannot use '{ATTR_ANNOTATION}' "
+                                      f"annotation with ignored attrs")
             return super().__setitem__(attrname, annotation)
 
         # ▼ Convert to Attr if not already
@@ -101,7 +133,7 @@ class AnnotationSpy(dict):
         # ▼ Do not allow ATTR_ANNOTATION in nested structures, if configured accordingly
         if not ALLOW_ATTR_ANNOTATIONS_INSIDE_GENERICS:
             if len(findall(rf'\W({ATTR_ANNOTATION})\W', annotation)) > 0:
-                raise ClasstoolsError(f"Annotation '{ATTR_ANNOTATION}' is reserved "
+                raise ClasstoolsError(f"Attr '{attrname}': annotation '{ATTR_ANNOTATION}' is reserved "
                                       f"and cannot be used inside generic structures to avoid confusion")
 
         # ▼ Put annotation on its place, skip ATTR_ANNOTATION
@@ -118,7 +150,7 @@ class AnnotationSpy(dict):
             elif annotation == '':
                 annotation = EMPTY_ANNOTATION
             else:
-                raise ClasstoolsError(f"Invalid ClassVar annotation: ClassVar{annotation}")
+                raise ClasstoolsError(f"Attr '{attrname}': invalid ClassVar annotation 'ClassVar{annotation}'")
         else:
             var.classvar = False
 
@@ -164,18 +196,14 @@ class Attr:
 
     IGNORED = type("ATTR_IGNORE_MARKER", (), dict(__slots__=()))()
 
-    def __new__(cls, varname=Null, value=Null, vartype=Null, *options):
-        this = super().__new__(cls)
-        this.name = varname
-        this.default = value
-        this.type = vartype
-
+    def __init__(self, varname=Null, value=Null, vartype=Null, **options):
+        self.name = varname
+        self.default = value
+        self.type = vartype
         # TODO: handle options
 
-        return this
-
     def __str__(self):
-        return f"Attr '{self.name}' [{self.default}] <{self.type}>" \
+        return f"Attr '{self.name}' [{self.default}] <{self.type or ' '}>" \
                f"{' C'*self.classvar}{f' ⚑{self.tag}'*(self.tag is not None)}" \
                f"{' 🔒'*self.const}{' 🕓'*(self.lazy is not False)}"
 
@@ -201,20 +229,22 @@ class Option:
             flag=True  – option is True/False only, no parameters are accepted
             flag=False – option stores a value, that must be provided as an argument
             flag=None  – option stores a value, but argument could be omitted
-                            (.default will be used as a value in this case)
+                            (Null will be used as a value in this case)
         TODO: add option icons to documentation
     """
 
-    __slots__ = 'name', 'default', 'flag', 'incompatibles', 'value'
+    __slots__ = 'name', 'default', 'flag', 'incompatibles'
 
+    # ▼ Stores current value (changed by modifiers, reset after applying to attr)
+    value = Null
+
+    @setupMode
     def __init__(self, name, *, default, flag: Union[bool, None], hates=None):
         self.name = name
-        self.default = default  # default value, <bool> if .type == True
-        self.flag = flag  # require, allow or deny argument
+        self.default = default  # default value, <bool> if .flag == True
+        self.flag = flag  # require/allow/deny argument
         # ▼ TODO: Option.incompatibles (on demand)
         self.incompatibles = hates  # option(s) that cannot be applied before current one
-        # ▼ Stores current value (changed by modifiers, reset after applying to attr)
-        self.value = Null
 
     def __ror__(self, other):
 
@@ -222,8 +252,9 @@ class Option:
         if self.value is Null:
             if self.flag is False:
                 raise ClasstoolsError(f"Option '{self.name}' requires an argument")
-            else:
-                self.value = True if self.flag is True else self.default
+            elif self.flag is True:
+                self.__class__.value = True
+            # else: value remains Null
 
         # ▼ If applied to Section, change section-common defaults via Section.classdict
         if isinstance(other, Section):
@@ -233,25 +264,27 @@ class Option:
         else:
             if not isinstance(other, Attr):
                 other = Attr(value=other)
+            if hasattr(other, self.name):
+                raise ClasstoolsError(f"Duplicate option '{self.name}'; "
+                                      f"was already set to {getattr(other, self.name)}")
             setattr(other, self.name, self.value)
 
         # ▼ Reset .value if altered by modifiers
-        self.value = Null
+        self.__class__.value = Null
         return other
 
     def __call__(self, arg):
         if self.flag is True:
-            raise ClasstoolsError(f"Option {self.name} is not callable")
-        # TODO: check argument type
-        self.value = arg
+            raise ClasstoolsError(f"Option '{self.name}' is not callable")
+        self.__class__.value = arg
         return self
 
     def __neg__(self):
         # NOTE: disabling an option with assigned argument will reset it
-        self.value = False if self.flag is True else None
+        self.__class__.value = False if self.flag is True else None
         return self
 
-    def __repr__(self): return auto_repr(self, f'{self.name}')
+    def __repr__(self): return auto_repr(self, self.name)
 
     def denyAttrAccess(self, name, value):
         raise AttributeError(f"'{self.name}' object is not intended to use beyond documented syntax")
@@ -292,7 +325,7 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
         metacls.resetOptions()
 
         if INJECT_OPTIONS:  # TESTME
-            # ▼ TODO: adjustable names below
+            # ▼ CONSIDER: adjustable names below
             metacls.clsdict['attr'] = attr
             metacls.clsdict['tag'] = tag
             metacls.clsdict['const'] = const
@@ -310,7 +343,7 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
             newClass.__attrs__ = metacls.mergeParentDicts(bases, '__attrs__', metacls.attrs)
 
         # ▼ Verify no explicit/implicit Attr() was assigned to non-annotated variable
-        for attr, value in clsdict.items():
+        for attrname, value in clsdict.items():
             if isinstance(value, Attr):
                 raise ClasstoolsError(f"Attr '{attr}' is used without type annotation!")
 
@@ -354,10 +387,10 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
     @classmethod
     def resetOptions(metacls):
         metacls.currentOptions.update({option.name: option.default for option in (tag, const, lazy)})
-        # CONSIDER: unresolved attr .currentOptions? Why?
 
 
 class Section:
+    __slots__ = 'type'
 
     owner = ClasstoolsType
 
@@ -377,11 +410,13 @@ class Section:
         else: raise ClasstoolsError("Section does not support arguments")
         return self
 
+    def __repr__(self): return auto_repr(self, self.type or '')
+
 
 # TODO: Move all options to options.py, define __all__ there and import options as 'from options import *'
 tag = Option('tag', default=None, flag=False)
 const = Option('const', default=False, flag=True)
-lazy = Option('lazy', default=False, flag=False)
+lazy = Option('lazy', default=False, flag=None)
 
 # TODO: review this in the end
 # If adding new option, add it to:
@@ -410,12 +445,12 @@ def test_concise_tagging_basic():
         c: Any = 3
 
         with OPTIONS |lazy('tag_setter'):
-            e: str
+            e: attr
             f: int = 0 |const
 
-        with TAG('tag') |lazy('tag_setter'):
+        with TAG('tag') |lazy:
             b: str = 'loool'
-            d: int = 0 |const
+            d: ClassVar[int] = 0 |const
 
     print(formatDict(A.__attrs__))
     print(formatDict(A.__tags__))
