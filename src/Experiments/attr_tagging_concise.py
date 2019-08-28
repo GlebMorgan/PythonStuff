@@ -25,21 +25,25 @@ log.setLevel('INFO')
 ATTR_ANNOTATION = 'attr'
 EMPTY_ANNOTATION = ''
 
-# Allow usage of ATTR_ANNOTATION inside generic structures in type annotations (e.g. ClassVar[attr])
+# ▼ Allow usage of ATTR_ANNOTATION inside generic structures in type annotations (e.g. ClassVar[attr])
 ALLOW_ATTR_ANNOTATIONS_INSIDE_GENERICS = False
 
-# Allow __dunder__ names to be processed by Classtools machinery and annotated with ATTR_ANNOTATION
+# ▼ Allow __dunder__ names to be processed by Classtools machinery and annotated with ATTR_ANNOTATION
 ALLOW_DUNDER_ATTRS = False
 
-# Add option definition objects (those used with '|option' syntax) to class dict
+# ▼ Create class variable for each attr with default value assigned.
+#   Else, instance variable will be assigned with its default only if auto init option is set
+#   Note: slots option overrides this config option, slots injection forbids class variables with same name
+STORE_DEFAULTS = True
+
+# ▼ Add option definition objects (those used with '|option' syntax) to class dict
 #   to make their names available (only) inside class body, thus avoiding extra imports
 #   These objects will be removed from class dict as soon as class statement is fully executed
 INJECT_OPTIONS = False
 
 # CONSIDER: always deny non-annotated attrs for now
-# Allow non-function attr is declared without annotation,
-#   else — treat non-annotated attrs as class attrs (do not process them with class tools routine)
-#   Note: non-annotated attrs inside SECTION blocks are not allowed
+# ▼ Allow non-function attr is declared without annotation.
+#   Else — treat non-annotated attrs as class attrs (do not process them with class tools routine)
 ALLOW_BARE_ATTRS = True
 
 
@@ -121,9 +125,15 @@ class AnnotationSpy(dict):
         # ▼ Set .type with removed 'ClassVar' and 'attr'
         var.type = annotation
 
-        # ▼ Delete attr from class dict, if not ClassVar
-        if not var.classvar: del clsdict[attrname]
-        else: clsdict[attrname] = var.default
+        if var.default is Null or (var.classvar is False and (self.owner.injectSlots or not STORE_DEFAULTS)):
+            if attrname in clsdict: del clsdict[attrname]
+        else:
+            clsdict[attrname] = var.default
+
+        # NOTE: Alternative version
+        # if var.default is Null \
+        # or (self.owner.injectSlots and var.classvar is False) \
+        # or (not STORE_DEFAULTS and var.classvar is False):
 
         # ▼ Set options which was not defined earlier by option definition objects / Attr kwargs
         for option in (__options__):
@@ -154,7 +164,6 @@ class Attr:
 
     IGNORED = type("ATTR_IGNORE_MARKER", (), dict(__slots__=()))()
 
-    @classmethod
     def __new__(cls, varname=Null, value=Null, vartype=Null, *options):
         this = super().__new__(cls)
         this.name = varname
@@ -218,7 +227,7 @@ class Option:
 
         # ▼ If applied to Section, change section-common defaults via Section.classdict
         if isinstance(other, Section):
-            other.metaclass.currentOptions[self.name] = self.value
+            other.owner.currentOptions[self.name] = self.value
 
         # ▼ Else, convert 'other' to Attr() and apply option to it
         else:
@@ -259,9 +268,6 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
         • init ——► auto-initialize all __attrs__ defaults to 'None'
     """
 
-    # __tags__ = {}  # FIXME: move this to cls.__new__ !
-    # __attrs__ = {}  # FIXME: move this to cls.__new__ !
-
     currentOptions: Dict[str, Any]
     clsdict: dict
     tags: defaultdict
@@ -294,7 +300,6 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
 
         return metacls.clsdict
 
-    @classmethod
     def __new__(metacls, clsname, bases, clsdict: dict, **kwargs):
 
         newClass = super().__new__(metacls, clsname, bases, clsdict)
@@ -354,7 +359,7 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
 
 class Section:
 
-    metaclass = ClasstoolsType
+    owner = ClasstoolsType
 
     def __init__(self, sectionType: str = None):
         self.type = sectionType
@@ -362,13 +367,13 @@ class Section:
     def __enter__(self): pass
 
     def __exit__(self, *args):
-        self.metaclass.resetOptions()
+        self.owner.resetOptions()
 
     def __call__(self, *args):
         if self.type == 'tagger':
             if len(args) != 1:
                 raise TypeError(f"Section '{self.type}' requires single argument: 'tag'")
-            self.metaclass.currentOptions['tag'] = args[0]
+            self.owner.currentOptions[tag.name] = args[0]
         else: raise ClasstoolsError("Section does not support arguments")
         return self
 
@@ -492,10 +497,10 @@ def test_all_types():
         c1: attr                    # Attr(Null/None)
         c2: attr = Attr()
 
-        d1: int = any               # Attr(any) + int
+        d1: int = any               # Attr(any) + int + __class__.d = any
         d2: int = Attr(any)
 
-        e1: attr = any              # Attr(any) + <no_ann>
+        e1: attr = any              # Attr(any) + <no_ann> + __class__.e = any
         e2: attr = Attr(any)
 
         g1: int = Null              # ? — like Attr()
@@ -533,5 +538,6 @@ def test_all_types():
 
 
 if __name__ == '__main__':
-    test_all_types()
+    test_concise_tagging_basic()
+    # test_all_types()
 
