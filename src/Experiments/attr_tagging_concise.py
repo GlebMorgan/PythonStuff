@@ -5,7 +5,7 @@ from functools import partial
 from itertools import starmap
 from operator import setitem
 from re import findall
-from typing import Any, ClassVar, Union, Dict
+from typing import Any, ClassVar, Union, Dict, DefaultDict
 
 from Utils import auto_repr, Null, Logger, attachItem, formatDict, legacy
 from orderedset import OrderedSet
@@ -19,13 +19,13 @@ log.setLevel('INFO')
 
 # FIXME: options state is saved until ror is called, no control over separate option setup and its application to attr
 
-# TODO: disallow Option attribute setting from inside class body, but allow inside this module
+# ✓ disallow Option attribute setting from inside class body, but allow inside this module
 
 # TODO: validate option argument when implementing necessary adjustments to attr (i.e. when using that argument)
 
-# TODO: Attr(default, **options) attr definition syntax
+# ✓ Attr(default, **options) attr definition syntax
 
-# TODO: Section['arg'] syntax
+# ✓ Section['arg'] syntax
 
 # TODO: inject slots, const and lazy implementations
 
@@ -78,16 +78,6 @@ class ClasstoolsError(RuntimeError):
     """ Error: class is used incorrectly by higher-level code """
 
 
-def setupMode(function):
-    def setupModeWrapper(self, *args, **kwargs):
-        self.__class__.__setattr__ = super(self.__class__, self).__class__.__setattr__
-        result = function(self, *args, **kwargs)
-        self.__class__.__setattr__ = self.__class__.denyAttrAccess
-        return result
-
-    return setupModeWrapper
-
-
 class AnnotationSpy(dict):
     """
         ... TODO
@@ -100,8 +90,10 @@ class AnnotationSpy(dict):
     def __setitem__(self, attrname, annotation):
         log.debug(f'[__annotations__][{attrname}] ◄—— {annotation}')
 
+        # ▼ Value is readily Null, if autoInit is disabled
+        default = self.owner.autoInit
+
         clsdict = self.owner.clsdict
-        default = None if self.owner.autoInit else Null
         var = clsdict.get(attrname, default)
 
         # ▼ Deny non-string annotations
@@ -200,7 +192,8 @@ class Attr:
         self.name = varname
         self.default = value
         self.type = vartype
-        # TODO: handle options
+        for name, value in options.items():
+            setattr(self, name, value)
 
     def __str__(self):
         return f"Attr '{self.name}' [{self.default}] <{self.type or ' '}>" \
@@ -237,6 +230,18 @@ class Option:
 
     # ▼ Stores current value (changed by modifiers, reset after applying to attr)
     value = Null
+
+    class setupMode:
+        """ Decorator that allows __setattr__ inside the decorated method """
+        def __init__(self, method):
+            self.method = method
+        def __get__(self, instance, owner):
+            self.instance = instance
+            return self
+        def __call__(self, *args, **kwargs):
+            self.instance.__class__.__setattr__ = super(self.instance.__class__, self.instance).__class__.__setattr__
+            self.method(self.instance, *args, **kwargs)
+            self.instance.__class__.__setattr__ = self.instance.__class__.denyAttrAccess
 
     @setupMode
     def __init__(self, name, *, default, flag: Union[bool, None], hates=None):
@@ -301,18 +306,21 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
         • init ——► auto-initialize all __attrs__ defaults to 'None'
     """
 
+    __tags__: DefaultDict[str, OrderedSet]
+    __attrs__: Dict[str, Attr]
+
     currentOptions: Dict[str, Any]
-    clsdict: dict
-    tags: defaultdict
-    attrs: dict
-    annotations: dict
+    clsdict: Dict[str, Any]
+    tags: DefaultDict[str, OrderedSet]
+    attrs: Dict[str, Attr]
+    annotations: Dict[str, str]
 
     @classmethod
-    def __prepare__(metacls, clsname, bases, enable=True, slots=False, init=False):
+    def __prepare__(metacls, clsname, bases, enable=True, slots=False, autoinit=Null):
         if enable is False: return {}
 
         metacls.injectSlots = slots
-        metacls.autoInit = init  # CONSIDER: autoInit value option (opportunity to supply argument)
+        metacls.autoInit = autoinit
 
         metacls.clsdict = {}
         metacls.tags: defaultdict = metacls.clsdict.setdefault('__tags__', defaultdict(OrderedSet))
@@ -335,26 +343,28 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
 
     def __new__(metacls, clsname, bases, clsdict: dict, **kwargs):
 
-        newClass = super().__new__(metacls, clsname, bases, clsdict)
+        # TESTME: __prepare__: enable=False will break this method
 
         # ▼ Use tags and attrs that are already in clsdict if no parents found
         if hasattr(metacls, 'clsdict') and bases:
-            newClass.__tags__ = metacls.mergeTags(bases, metacls.tags)
-            newClass.__attrs__ = metacls.mergeParentDicts(bases, '__attrs__', metacls.attrs)
+            clsdict['__tags__'] = metacls.mergeTags(bases, metacls.tags)
+            clsdict['__attrs__'] = metacls.mergeParentDicts(bases, '__attrs__', metacls.attrs)
 
         # ▼ Verify no explicit/implicit Attr() was assigned to non-annotated variable
         for attrname, value in clsdict.items():
             if isinstance(value, Attr):
-                raise ClasstoolsError(f"Attr '{attr}' is used without type annotation!")
+                raise ClasstoolsError(f"Attr '{attrname}' is used without type annotation!")
 
-        # CONSIDER: defaults for slots could be taken from __attrs__
+        # ▼ Inject slots from all non-classvar attrs, if configured accordingly
+        if metacls.injectSlots:
+            clsdict['__slots__'] = tuple(attrobj.name for attrobj in metacls.attrs.values() if not attrobj.classvar)
 
         # ▼ Convert annotation spy to normal dict
-        newClass.__annotations__ = dict(metacls.annotations)
+            clsdict['__annotations__'] = dict(metacls.annotations)
 
-        newClass.__slots__ = ()
+        metacls.configureAttrs()
 
-        return newClass
+        return super().__new__(metacls, clsname, bases, clsdict)
 
     @staticmethod
     def mergeTags(parents, currentTags):
@@ -388,6 +398,14 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
     def resetOptions(metacls):
         metacls.currentOptions.update({option.name: option.default for option in (tag, const, lazy)})
 
+    @classmethod
+    def configureAttrs(metacls):
+        # CONSIDER: defaults for slots could be taken from __attrs__
+
+        for attrobj in metacls.attrs.values():
+            if attrobj.const and attrobj.lazy: pass
+
+
 
 class Section:
     __slots__ = 'type'
@@ -409,6 +427,9 @@ class Section:
             self.owner.currentOptions[tag.name] = args[0]
         else: raise ClasstoolsError("Section does not support arguments")
         return self
+
+    def __getitem__(self, *args):
+        return self.__call__(*args)
 
     def __repr__(self): return auto_repr(self, self.type or '')
 
@@ -446,9 +467,9 @@ def test_concise_tagging_basic():
 
         with OPTIONS |lazy('tag_setter'):
             e: attr
-            f: int = 0 |const
+            f: int = Attr(0, const=True) |tag('Attr')
 
-        with TAG('tag') |lazy:
+        with TAG['tag'] |lazy:
             b: str = 'loool'
             d: ClassVar[int] = 0 |const
 
@@ -459,6 +480,35 @@ def test_concise_tagging_basic():
     print(A().b)
     print(A().c)
     exit()
+
+
+def test_inject_slots():
+    class B(metaclass=ClasstoolsType, slots=True):
+        a: attr = 7
+        b: int = 0 |const |lazy('set_b')
+
+    b = B()
+    print(f"Has dict? {hasattr(b, '__dict__') and b.__dict__}")
+    print(b.__slots__)
+
+    class C(metaclass=ClasstoolsType, slots=True):
+
+        a0: str = -Attr()
+        a: int = 4 |tag("test") |lazy('set_a') |const
+        c: Any = 3
+
+        with OPTIONS |lazy('tag_setter'):
+            e: attr
+            f: int = Attr(0, const=True) |tag('Attr')
+
+        with TAG['tag'] |lazy:
+            b: str = 'loool'
+            d: ClassVar[int] = 0 |const
+
+    c = C()
+    print(f"Has dict? {hasattr(c, '__dict__') and c.__dict__}")
+    print(f"Has slots? {hasattr(c, '__slots__') and c.__slots__}")
+
 
 def test_concise_tagging_concept():
 
@@ -514,6 +564,7 @@ def test_concise_tagging_concept():
 
     print(dir(T()))
     print(T.__annotations__)
+
 
 def test_all_types():
 
@@ -573,6 +624,7 @@ def test_all_types():
 
 
 if __name__ == '__main__':
-    test_concise_tagging_basic()
+    test_inject_slots()
+    # test_concise_tagging_basic()
     # test_all_types()
 
