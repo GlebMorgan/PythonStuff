@@ -5,17 +5,17 @@ from functools import partial
 from itertools import starmap
 from operator import setitem
 from re import findall
-from typing import Any, ClassVar, Union, Dict, DefaultDict
+from typing import Any, ClassVar, Union, Dict, DefaultDict, Callable
 
 from Utils import auto_repr, Null, Logger, attachItem, formatDict, legacy
 from orderedset import OrderedSet
 
-__options__ = 'tag', 'const', 'lazy'
+__options__ = 'tag', 'init', 'const', 'lazy'
 
 __all__ = 'attr', 'TAG', 'OPTIONS', *__options__
 
 log = Logger('Classtools')
-log.setLevel('INFO')
+log.setLevel('DEBUG')
 
 # FIXME: options state is saved until ror is called, no control over separate option setup and its application to attr
 
@@ -27,7 +27,7 @@ log.setLevel('INFO')
 
 # ✓ Section['arg'] syntax
 
-# TODO: inject slots, const and lazy implementations
+# ✓ inject slots, const and lazy implementations
 
 # TODO: document all this stuff!
 
@@ -77,6 +77,9 @@ ALLOW_BARE_ATTRS = True
 class ClasstoolsError(RuntimeError):
     """ Error: class is used incorrectly by higher-level code """
 
+class GetterError(RuntimeError):
+    """ Error: lazy attribute getter function failed to compute attr value """
+
 
 class AnnotationSpy(dict):
     """
@@ -88,8 +91,6 @@ class AnnotationSpy(dict):
         super().__init__()
 
     def __setitem__(self, attrname, annotation):
-        log.debug(f'[__annotations__][{attrname}] ◄—— {annotation}')
-
         # ▼ Value is readily Null, if autoInit is disabled
         default = self.owner.autoInit
 
@@ -184,7 +185,7 @@ class Attr:
     """
 
     # ▼ ' ... , *__options__' is not used here because PyCharm fails to resolve attributes this way round
-    __slots__ = 'name', 'default', 'type', 'classvar', 'tag', 'const', 'lazy'
+    __slots__ = 'name', 'default', 'type', 'classvar', 'tag', 'init', 'const', 'lazy'
 
     IGNORED = type("ATTR_IGNORE_MARKER", (), dict(__slots__=()))()
 
@@ -198,7 +199,7 @@ class Attr:
     def __str__(self):
         return f"Attr '{self.name}' [{self.default}] <{self.type or ' '}>" \
                f"{' C'*self.classvar}{f' ⚑{self.tag}'*(self.tag is not None)}" \
-               f"{' 🔒'*self.const}{' 🕓'*(self.lazy is not False)}"
+               f"{' ⛔'*(not self.init)}{' 🔒'*self.const}{' 🕓'*(self.lazy is not False)}"
 
     def __repr__(self): return auto_repr(self, self.name)
 
@@ -336,13 +337,13 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
             # ▼ CONSIDER: adjustable names below
             metacls.clsdict['attr'] = attr
             metacls.clsdict['tag'] = tag
+            metacls.clsdict['init'] = init
             metacls.clsdict['const'] = const
             metacls.clsdict['lazy'] = lazy
 
         return metacls.clsdict
 
     def __new__(metacls, clsname, bases, clsdict: dict, **kwargs):
-
         # TESTME: __prepare__: enable=False will break this method
 
         # ▼ Use tags and attrs that are already in clsdict if no parents found
@@ -355,16 +356,65 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
             if isinstance(value, Attr):
                 raise ClasstoolsError(f"Attr '{attrname}' is used without type annotation!")
 
+        # ▼ Check for cls.init() argument names and attr names conflicts
+        if 'init' in clsdict and isinstance(clsdict['init'], Callable):
+            if any(varname in metacls.attrs for varname in clsdict['init'].__code__.co_varnames):
+                raise ClasstoolsError(f"{clsname}.init() argument names "
+                                      f"conflict with {clsname} attr names")
+
         # ▼ Inject slots from all non-classvar attrs, if configured accordingly
         if metacls.injectSlots:
             clsdict['__slots__'] = tuple(attrobj.name for attrobj in metacls.attrs.values() if not attrobj.classvar)
 
-        # ▼ Convert annotation spy to normal dict
-            clsdict['__annotations__'] = dict(metacls.annotations)
+        # ▼ Generate __init__() function, 'init()' is used to further initialize object
+        clsdict['__init__'] = metacls.__init_attrs__
 
-        metacls.configureAttrs()
+        # ▼ Convert annotation spy to normal dict
+        clsdict['__annotations__'] = dict(metacls.annotations)
 
         return super().__new__(metacls, clsname, bases, clsdict)
+
+    def __init_attrs__(attr, *a, **kw):
+        """ This is gonna be new class's __init__ method """
+
+        attrsls = attr.__class__
+        log.debug(f"__init_attrs__: self={attrsls.__name__}, args={a}, kwargs={kw}")
+
+        for name, currAttr in attr.__attrs__.items():
+            # ▼ Get attr value from arguments or .default
+            try:
+                value = kw.pop(name)
+            except KeyError:
+                value = currAttr.default
+            else:
+                if currAttr.init is False:
+                    raise ClasstoolsError(f"Attr '{name}' is configured no-init")
+
+            if currAttr.default is Null and currAttr.lazy is False:
+                continue  # ◄ NOTE: attr is not initialized at all, options are ignored
+
+            # ▼ Analyze options and modify value if necessary
+            if currAttr.lazy is not False:
+                getter = currAttr.lazy
+                if getter is Null: getter = f'get_{name}'
+                if not hasattr(attr, getter):
+                    raise ClasstoolsError(f"Class '{attrsls.__name__}' does not have "
+                                          f"getter method '{getter}' for '{name}' attr")
+                if currAttr.const is True:
+                    # noinspection PyArgumentList
+                    setattr(attrsls, name, LazyConstDescriptor(value, getter))
+                else:
+                    setattr(attrsls, name, LazyDescriptor(value, getter))
+            elif currAttr.const is True:
+                setattr(attrsls, name, ConstDescriptor(value))
+            else:
+                setattr(attr, name, value)
+
+        # CONSIDER: move configuration code in a separate function if it will take a lot of place
+        # self.__class__._configureAttrs_()
+
+        # ▼ TODO: handle arguments-related errors here
+        if hasattr(attr, 'init'): attr.init(*a, **kw)
 
     @staticmethod
     def mergeTags(parents, currentTags):
@@ -396,14 +446,57 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
 
     @classmethod
     def resetOptions(metacls):
-        metacls.currentOptions.update({option.name: option.default for option in (tag, const, lazy)})
+        metacls.currentOptions.update({option.name: option.default for option in (tag, init, const, lazy)})
 
-    @classmethod
-    def configureAttrs(metacls):
-        # CONSIDER: defaults for slots could be taken from __attrs__
 
-        for attrobj in metacls.attrs.values():
-            if attrobj.const and attrobj.lazy: pass
+class LazyDescriptor:
+    """ If getter raises GetterError, default is returned (on current attr access) """
+    __slots__ = 'value', 'default', 'getter'
+
+    def __init__(self, value, getter):
+        self.getter: str = getter
+        self.default = value
+        self.value = Null
+
+    def __get__(self, instance, owner):
+        # ▼ Access descriptor itself from class
+        if instance is None: return self
+        if self.value is Null:
+            try: self.value = getattr(instance, self.getter)()
+            except GetterError:
+                if self.default is Null:
+                    raise ClasstoolsError("Failed to fallback to .default as it is not provided")
+                return self.default
+        return self.value
+
+    def __set__(self, instance, value):
+        self.value = value
+
+    # CONSIDER: __delete__ — ?
+
+
+class ConstDescriptor:
+    __slots__ = 'value'
+
+    def __init__(self, value):
+        self.value = value
+
+    def __get__(self, instance, owner):
+        # ▼ Access descriptor itself from class
+        if instance is None: return self
+        return self.value
+
+    def __set__(self, instance, value):
+        # ▼ Access descriptor itself from class
+        if instance is None: return self
+        raise AttributeError("Cannot change constant attr")
+
+
+class LazyConstDescriptor:
+    __slots__ = LazyDescriptor.__slots__
+    __init__ = LazyDescriptor.__init__
+    __get__ = LazyDescriptor.__get__
+    __set__ = ConstDescriptor.__set__
 
 
 
@@ -434,8 +527,14 @@ class Section:
     def __repr__(self): return auto_repr(self, self.type or '')
 
 
+def classtools(cls):
+    """ Just to shut down PyCharm code inspection considering __init__ arguments """
+    return cls
+
+
 # TODO: Move all options to options.py, define __all__ there and import options as 'from options import *'
 tag = Option('tag', default=None, flag=False)
+init = Option('init', default=True, flag=True)
 const = Option('const', default=False, flag=True)
 lazy = Option('lazy', default=False, flag=None)
 
@@ -445,7 +544,7 @@ lazy = Option('lazy', default=False, flag=None)
 #     2) __options__ global variable
 #     3) Attr.__slots__
 #     4) Attr.__str__ option icons
-#     6) ClassDictProxy.resetOptions()
+#     6) ClasstoolsType.resetOptions()
 #     7) ClassDict name injections in ClasstoolsType.__prepare__
 #     8) Option __doc__
 
@@ -459,7 +558,9 @@ TAG = Section('tagger')
 
 
 def test_concise_tagging_basic():
-    class A(metaclass=ClasstoolsType):
+
+    @classtools
+    class A(metaclass=ClasstoolsType, slots=True):
 
         a0: str = -Attr()
         a: int = 4 |tag("test") |lazy('set_a') |const
@@ -469,16 +570,27 @@ def test_concise_tagging_basic():
             e: attr
             f: int = Attr(0, const=True) |tag('Attr')
 
-        with TAG['tag'] |lazy:
-            b: str = 'loool'
+        with TAG['tag'] |-init:
+            b: str = 'loool' |init
             d: ClassVar[int] = 0 |const
+            g: ClassVar[int] = 42 |lazy
+
+        def set_a(self): return 'a_value'
+
+        def tag_setter(self): return 'tag_value'
+
+        def get_g(self): return 33
 
     print(formatDict(A.__attrs__))
     print(formatDict(A.__tags__))
     print(formatDict(A.__dict__))
-    print(A().a)
-    print(A().b)
-    print(A().c)
+    print(hasattr(A(), '__dict__'))
+    print(f".a = {A().a}")
+    print(f".b = {A().b}")
+    print(f".c = {A(c=9).c}")
+    print(f".d = {A().d}")
+    print(f".g = {A().g}")  # CONSIDER: why A().g does not raise AttributeError? g is not in __slots__!
+    print(f".__slots__ = {A().__slots__}")
     exit()
 
 
@@ -624,7 +736,7 @@ def test_all_types():
 
 
 if __name__ == '__main__':
-    test_inject_slots()
-    # test_concise_tagging_basic()
+    # test_inject_slots()
+    test_concise_tagging_basic()
     # test_all_types()
 
