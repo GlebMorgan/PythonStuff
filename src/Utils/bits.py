@@ -2,6 +2,9 @@ from functools import reduce
 from math import log2
 
 
+__all__ = 'set', 'clear', 'combine', 'extract', 'flag', 'flags', 'bitsarray'
+
+
 def set(bits=0, value=0):
     """
     Set specified bits to 1 and return new binary number

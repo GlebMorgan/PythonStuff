@@ -1,6 +1,9 @@
 from functools import reduce
 
 
+__all__ = 'rfc1071', 'lrc'
+
+
 def rfc1071(seqBytes):
     """
     Calculate 2-byte RFC1071 checksum of bytes sequence

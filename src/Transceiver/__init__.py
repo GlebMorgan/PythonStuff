@@ -1,3 +1,3 @@
 from .serial_transceiver import SerialTransceiver, PelengTransceiver
-from .transceiver_errors import *
+from .errors import *
 from .checksums import *

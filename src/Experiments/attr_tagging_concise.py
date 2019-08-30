@@ -5,9 +5,9 @@ from functools import partial
 from itertools import starmap
 from operator import setitem
 from re import findall
-from typing import Any, ClassVar, Union, Dict, DefaultDict, Callable
+from typing import Any, ClassVar, Union, Dict, DefaultDict
 
-from Utils import auto_repr, Null, Logger, attachItem, formatDict, legacy
+from Utils import auto_repr, Null, Logger, attachItem, formatDict
 from orderedset import OrderedSet
 
 __options__ = 'tag', 'init', 'const', 'lazy'
@@ -25,32 +25,29 @@ log.setLevel('DEBUG')
 
 # —————————————————————————————————————————————————————— TODOs ——————————————————————————————————————————————————————— #
 
-# ✓ disallow Option attribute setting from inside class body, but allow inside this module
+# ✓ Disallow Option attribute setting from inside class body, but allow inside this module
 
-# ✓ validate option argument when implementing necessary adjustments to attr (i.e. when using that argument)
+# ✓ Validate option argument when implementing necessary adjustments to attr (i.e. when using that argument)
 
 # ✓ Attr(default, **options) attr definition syntax
 
 # ✓ Section['arg'] syntax
 
-# ✓ inject slots, const and lazy implementations
+# ✓ Inject slots, const and lazy implementations
 
 # TODO: document all this stuff!
 
 # ———————————————————————————————————————————————————— ToCONSIDER ———————————————————————————————————————————————————— #
 
-# ✓ factory option: is it needed? ——► stick with searching for .copy attr
+# ✓ Factory option: is it needed? ——► stick with searching for .copy attr
 
-# CONSIDER: rename __tags__ ——► _tags_ (may break some dunder checks, needs investigation)
+# CONSIDER: Rename __tags__ ——► _tags_ (may break some dunder checks, needs investigation)
 
-# CONSIDER: create a __owner__ variable in metaclass referencing to outer class, in which current class is defined;
+# CONSIDER: Create a __owner__ variable in metaclass referencing to outer class, in which current class is defined;
 #           this way inner classes and variables may be visible in child class, which is always very convenient
 
-# CONSIDER: implement lookups diving into mro classes when searching for __tags__ and __attrs__ to initialize slots
+# CONSIDER: Implement lookups diving into mro classes when searching for __tags__ and __attrs__ to initialize slots
 #           just like normal attrs lookup is performed instead of creating cumulative dicts in each class
-
-# CONSIDER: test pickling
-
 
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 

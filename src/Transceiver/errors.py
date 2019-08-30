@@ -2,6 +2,10 @@ import serial
 from Utils import alias
 
 
+__all__ = 'SerialError', 'SerialWriteTimeoutError', 'SerialReadTimeoutError', 'AddressMismatchError', \
+          'SerialCommunicationError', 'BadDataError', 'BadCrcError'
+
+
 class VerboseError:
     def __init__(self, *args, data=None, dataname=None):
         if (data is not None):
