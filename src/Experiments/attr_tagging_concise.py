@@ -2,7 +2,7 @@ from __future__ import annotations as annotations_feature
 
 from collections import defaultdict
 from functools import partial
-from itertools import starmap
+from itertools import starmap, chain
 from operator import setitem
 from re import findall
 from typing import Any, ClassVar, Union, Dict, DefaultDict
@@ -21,7 +21,7 @@ log.setLevel('DEBUG')
 
 # FIXME: |const breaks pickling
 
-# FIXME: options state is saved until ror is called, no control over separate option setup and its application to attr
+# FIXME: options state is saved until ror is called, no control over isolated option config and its application to attr
 
 # —————————————————————————————————————————————————————— TODOs ——————————————————————————————————————————————————————— #
 
@@ -29,13 +29,15 @@ log.setLevel('DEBUG')
 
 # ✓ Validate option argument when implementing necessary adjustments to attr (i.e. when using that argument)
 
-# ✓ Attr(default, **options) attr definition syntax
+# ✓ Attr(default, **options) attr initialization syntax
 
 # ✓ Section['arg'] syntax
 
 # ✓ Inject slots, const and lazy implementations
 
-# TODO: document all this stuff!
+# TODO: Document all this stuff!
+
+# TODO: Metaclass options setting through same |option syntax
 
 # ———————————————————————————————————————————————————— ToCONSIDER ———————————————————————————————————————————————————— #
 
@@ -49,6 +51,11 @@ log.setLevel('DEBUG')
 # CONSIDER: Implement lookups diving into mro classes when searching for __tags__ and __attrs__ to initialize slots
 #           just like normal attrs lookup is performed instead of creating cumulative dicts in each class
 
+# CONSIDER: metaclass options are accessible from instance class — eliminate this somehow
+
+# ▼ CONSIDER: check non-annotated attrs not only for being Attr instances, but for all other service Classtools classes
+#             (may use kind of AbcMeta here for isinstance check): here + non-annotated attrs check
+
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 
 
@@ -57,38 +64,57 @@ log.setLevel('DEBUG')
 ATTR_ANNOTATION = 'attr'
 EMPTY_ANNOTATION = ''
 
-# ▼ Allow usage of ATTR_ANNOTATION inside generic structures in type annotations (e.g. ClassVar[attr])
-ALLOW_ATTR_ANNOTATIONS_INSIDE_GENERICS = False
+# ▼ Allow usage of ATTR_ANNOTATION marker in type annotations (+ inside generic structures e.g. ClassVar[attr])
+ALLOW_ATTR_ANNOTATIONS = False
 
-# ▼ Allow __dunder__ names to be processed by Classtools machinery and annotated with ATTR_ANNOTATION
+# ▼ Allow __dunder__ names to be processed by Classtools machinery and be annotated with ATTR_ANNOTATION
 ALLOW_DUNDER_ATTRS = False
 
-# ▼ Create class variable for each attr with default value assigned.
-#   Else, instance variable will be assigned with its default only if auto init option is set
-#   Note: slots option overrides this config option, slots injection forbids class variables with same name
+# ▼ Create class variable for each attr with default value assigned
+#   Else, instance variable will be assigned with its default only if Classtools |autoinit option is set
+#   Note: Classtools |slots option overrides STORE_DEFAULTS config option as slots injection will cause name collisions
 STORE_DEFAULTS = True
 
-# ▼ Add option definition objects (those used with '|option' syntax) to class dict
-#   to make their names available (only) inside class body, thus avoiding extra imports
+# ▼ Add Attr option definition objects (those used with '|option' syntax) to created class's dict
+#   It will make their names available (only) inside class body, thus avoiding extra imports
 #   These objects will be removed from class dict as soon as class statement is fully executed
 INJECT_OPTIONS = False
 
-# NOTE: always deny non-annotated attrs for now
+# TODO: comment to 'ALLOW_SERVICE_OBJECTS'
+ALLOW_SERVICE_OBJECTS = False
+
+# NOTE: Option is not used — always denying non-annotated Attr()s for now
 # ▼ Allow non-function attr is declared without annotation.
 #   Else — treat non-annotated attrs as class attrs (do not process them with class tools routine)
 ALLOW_BARE_ATTRS = True
 
 
 class ClasstoolsError(RuntimeError):
-    """ Error: class is used incorrectly by higher-level code """
+    """ Error: Classtools functionality is used incorrectly when defining class """
+
 
 class GetterError(RuntimeError):
-    """ Error: lazy attribute getter function failed to compute attr value """
+    """ Error: Lazy attribute getter function failed to compute attr value """
 
 
 class AnnotationSpy(dict):
     """
-        ... TODO
+        Dict-like class that intercepts annotation assignments and processes all newly defined
+            annotated class variables with __attrs__ creation machinery
+        General conceptual mechanics:
+            1. variable value is converted to Attr(), if not already
+            2. attr.default is auto-assigned with fallback default, if provided via |autoinit
+            3. considering that default value is provided, it is stored in class dict if:
+                • attr is marked as ClassVar
+                • both Classtools |slots option is False and STORE_DEFAULTS config option is True
+            4. attr options that have not been set are assigned with their respective defaults
+            5. attr is added to __tags__ and __slots__ dicts
+        Pay attention:
+            • Dunder attrs are ignored (left alone as class attrs), if ALLOW_DUNDER_ATTRS config option is False
+            • Attr.IGNORED attrs are completely removed from class as if there were only type-annotated name
+            • ClassVar annotation is not included into attr.type, annotations is left unchanged
+            • If annotated with ATTR_ANNOTATION: name is not added to annotations, attr.type is left empty
+            • Annotations must be strings, error is raised otherwise
     """
 
     def __init__(self, metaclass):
@@ -110,10 +136,6 @@ class AnnotationSpy(dict):
         # ▼ Skip dunder attrs, if configured accordingly
         if not ALLOW_DUNDER_ATTRS:
             if attrname.startswith('__') and attrname.endswith('__'):
-                # ▼ CONSIDER: check not only for Attr, but for all other service Classtools classes
-                #             (may use kind of AbcMeta here for isinstance check): here + non-annotated attrs check
-                if isinstance(var, Attr) or annotation == ATTR_ANNOTATION:
-                    raise ClasstoolsError(f"Classtools is configured to deny __dunder__ Attr()s")
                 return super().__setitem__(attrname, annotation)
 
         # ▼ Skip and remove ignored attrs from class dict
@@ -128,17 +150,11 @@ class AnnotationSpy(dict):
         if isinstance(var, Attr): var.name = attrname
         else: var = Attr(attrname, var)
 
-        # ▼ Do not allow ATTR_ANNOTATION in nested structures, if configured accordingly
-        if not ALLOW_ATTR_ANNOTATIONS_INSIDE_GENERICS:
-            if len(findall(rf'\W({ATTR_ANNOTATION})\W', annotation)) > 0:
-                raise ClasstoolsError(f"Attr '{attrname}': annotation '{ATTR_ANNOTATION}' is reserved "
-                                      f"and cannot be used inside generic structures to avoid confusion")
-
         # ▼ Put annotation on its place, skip ATTR_ANNOTATION
         if annotation == ATTR_ANNOTATION: annotation = EMPTY_ANNOTATION
         else: super().__setitem__(attrname, annotation)
 
-        # CONSIDER: ▼ parse generic annotations correctly (use re, dedicated module or smth)
+        # CONSIDER: ▼ Parse generic annotations correctly (use re, dedicated module or smth)
         # ▼ Set attr as classvar and strip annotation, if that's the case
         if annotation.startswith('ClassVar'):
             var.classvar = True
@@ -188,7 +204,16 @@ class Attr:
             ...
         Mutable defaults must provide .copy() method (no-args) that is used to initialize object attrs;
             otherwise all objects will refer to one-and-the-same object stored in __attrs__.default
-        ... TODO
+        ... TODO: Attr docstring
+        Repr icons:  # CONSIDER: change to ascii because of console does not support utf-8 and monospaced font breaks
+            Attr      instance attr
+            ClassAttr class attr
+            [...]     default value
+            <...>     declared type
+            ⚑...      tag
+            ⛔        NO init
+            🔒        const
+            🕓        lazy
     """
 
     # ▼ ' ... , *__options__' is not used here because PyCharm fails to resolve attributes this way round
@@ -231,7 +256,7 @@ class Option:
             flag=False – option stores a value, that must be provided as an argument
             flag=None  – option stores a value, but argument could be omitted
                             (Null will be used as a value in this case)
-        TODO: add option icons to documentation
+        ... TODO: Option docstring
     """
 
     __slots__ = 'name', 'default', 'flag', 'incompatibles'
@@ -335,9 +360,9 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
         metacls.autoInit = autoinit
 
         metacls.clsdict = {}
-        metacls.tags: defaultdict = metacls.clsdict.setdefault('__tags__', defaultdict(OrderedSet))
-        metacls.attrs: dict = metacls.clsdict.setdefault('__attrs__', {})
-        metacls.annotations: dict = metacls.clsdict.setdefault('__annotations__', AnnotationSpy(metacls))
+        metacls.tags = metacls.clsdict.setdefault('__tags__', defaultdict(OrderedSet))
+        metacls.attrs = metacls.clsdict.setdefault('__attrs__', {})
+        metacls.annotations = metacls.clsdict.setdefault('__annotations__', AnnotationSpy(metacls))
 
         metacls.currentOptions: Dict[str, Any] = {}
 
@@ -364,10 +389,28 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
             clsdict['__tags__'] = metacls.mergeTags(bases, metacls.tags)
             clsdict['__attrs__'] = metacls.mergeParentDicts(bases, '__attrs__', metacls.attrs)
 
-        # ▼ Verify no explicit/implicit Attr() was assigned to non-annotated variable
+        # ▼ Deny explicit/implicit Attr()s assignments to non-annotated variables
         for attrname, value in clsdict.items():
             if isinstance(value, Attr):
                 raise ClasstoolsError(f"Attr '{attrname}' is used without type annotation!")
+            if isinstance(value, Attr.IGNORED.__class__):
+                raise ClasstoolsError(f"Attr.IGNORED marker could be used only with annotated variables")
+
+        # ▼ Deny ATTR_ANNOTATION in annotations and generic structures, if configured accordingly
+        if not ALLOW_ATTR_ANNOTATIONS:
+            if ATTR_ANNOTATION in metacls.annotations:
+                raise ClasstoolsError(f"Classtools is configured to deny '{ATTR_ANNOTATION}' annotations")
+            for attrname, annotation in metacls.annotations.items():
+                if len(findall(rf'\W({ATTR_ANNOTATION})\W', annotation)) > 0:
+                    raise ClasstoolsError(f"Attr '{attrname}: {annotation}': Classtools is configured to deny "
+                                          f"'{ATTR_ANNOTATION}' annotations inside generic structures")
+
+        # ▼ Deny Classtools service objects assignments to class variables or attrs, if configured accordingly
+        if not ALLOW_SERVICE_OBJECTS:
+            for value in chain(clsdict.values(), (attrobj.default for attrobj in metacls.attrs.values())):
+                if isinstance(value, (Section, Option)):
+                    raise ClasstoolsError(f"Classtools is configured to deny "
+                                          f"'{value.__class__.__name__}' objects in user classes")
 
         # ▼ Check for cls.init() argument names and attr names conflicts
         # CONSIDER: do I actually need this check?
@@ -470,7 +513,11 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
 
 
 class LazyDescriptor:
-    """ If getter raises GetterError, default is returned (on current attr access) """
+    """
+        TODO: Descriptors docstrings
+        If getter raises GetterError, default is returned (on current attr access)
+    """
+
     __slots__ = 'value', 'default', 'getter'
 
     def __init__(self, value, getter):
@@ -520,6 +567,10 @@ class LazyConstDescriptor:
 
 
 class Section:
+    """
+        TODO: Section docstring
+    """
+
     __slots__ = 'type'
 
     owner = ClasstoolsType
