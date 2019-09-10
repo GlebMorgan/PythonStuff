@@ -82,9 +82,9 @@ class SerialTransceiver(serial.Serial):
 
     @contextmanager
     def reopen(self):
-        was_open = self.is_open()
+        was_open = self.is_open
         if was_open: self.close()
-        yield
+        yield self
         if was_open: self.open()
 
 
