@@ -1,4 +1,5 @@
 import struct
+from contextlib import contextmanager
 from functools import wraps
 
 import serial
@@ -78,6 +79,13 @@ class SerialTransceiver(serial.Serial):
         if ('FileNotFoundError' in error.args[0]):
             raise SerialCommunicationError(f"Cannot open port '{comPortName}' - "
                                            f"interface does not exist (device unplugged?)")
+
+    @contextmanager
+    def reopen(self):
+        was_open = self.is_open()
+        if was_open: self.close()
+        yield
+        if was_open: self.open()
 
 
 class PelengTransceiver(SerialTransceiver):
@@ -191,7 +199,7 @@ class PelengTransceiver(SerialTransceiver):
                     log.info(f"Serial input buffer flushed")
             return data[:-2] if (not zerobyte) else data[:-3]  # 2 is packet RFC, 1 is zero padding byte
         else:
-            raise BadRfcError(f"Bad packet checksum (expected '{bytewise(rfc1071(data[:-2]))}', "
+            raise BadCrcError(f"Bad packet checksum (expected '{bytewise(rfc1071(data[:-2]))}', "
                               f"got '{bytewise(data[-2:])}'). Packet discarded",
                               dataname="Packet", data=header + data)
 
