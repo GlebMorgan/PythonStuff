@@ -31,7 +31,7 @@ if __name__ == '__main__':
     try:
         version = get_version()
         print(f"Press any key to install PyUtils v{version} ...")
-
+        input()
         install(version)
     except Exception as e:
         die(e)

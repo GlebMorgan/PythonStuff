@@ -585,6 +585,13 @@ def ask(msg, options=None):
         if ans.strip().lower() in options: return ans
     else: die("Run out of attempts")
 
+
+@contextmanager
+def ignoreErrors():
+    try: yield
+    except Exception: pass
+
+
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 
 

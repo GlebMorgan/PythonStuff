@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='PyUtils',
-    version='1.1dev2.5',
+    version='1.1dev2.7',
     package_dir = {'': 'src'},
     packages=['Utils', 'PyQt5Utils', 'Transceiver'],
     url='https://github.com/GlebMorgan/PythonStuff',
