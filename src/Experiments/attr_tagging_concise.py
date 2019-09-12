@@ -37,6 +37,8 @@ log.setLevel('DEBUG')
 
 # TODO: Document all this stuff!
 
+# TODO: Init injection disabling option
+
 # TODO: Metaclass options setting through same |option syntax
 
 # ———————————————————————————————————————————————————— ToCONSIDER ———————————————————————————————————————————————————— #

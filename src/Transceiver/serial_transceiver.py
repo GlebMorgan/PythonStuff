@@ -13,6 +13,7 @@ slog = Logger("Packets")
 # CONSIDER: move all SerialCommunication-related errors to Transceiver class (interface)
 #           and import it into utilizing classes to allow interface definition and raising proper error types
 
+# CONSIDER: save and load protocol-specific serial port settings via Serial.save_settings()
 
 # COMMAND PACKET STRUCTURE
 # 1           2     3:4           5:6         7:8       9:...         -3    -2:-1
@@ -33,6 +34,8 @@ class SerialTransceiver(serial.Serial):
         'timeout': 0.5,
         'write_timeout': 0.5,
     }
+
+    BAUDRATES = serial.Serial.__bases__[0].BAUDRATES
 
     def __init__(self, **kwargs):
         config = self.DEFAULT_CONFIG
