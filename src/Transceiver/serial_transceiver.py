@@ -70,25 +70,32 @@ class SerialTransceiver(serial.Serial):
     def readSimple(self, size=1) -> bytes:
         return super().read(size)
 
-    @staticmethod
-    def handleSerialError(error):
+    def handleSerialError(self, error: Exception):
+        """ Logs more detailed SerialError description. Used when opening serial communication.
+            Returns True if error needs further handling, False otherwise
+        """
+        if not isinstance(error, SerialError): raise error
         if ("Port is already open." == error.args[0]):
-            log.warning("Attempt opening already opened port - error skipped")
-            return
+            log.warning(f"Port {self.port} is already opened - error skipped")
+            return False
         comPortName = error.args[0].split("'", maxsplit=2)[1]
         if ('PermissionError' in error.args[0]):
-            raise SerialCommunicationError(f"Cannot open port '{comPortName}' - interface is occupied "
-                                           f"by another recourse (different app is using that port?)")
-        if ('FileNotFoundError' in error.args[0]):
-            raise SerialCommunicationError(f"Cannot open port '{comPortName}' - "
-                                           f"interface does not exist (device unplugged?)")
+            log.error(f"Cannot open port '{comPortName}' - "
+                      f"interface is occupied by another recourse (different app is using that port?)")
+        elif ('FileNotFoundError' in error.args[0]):
+            log.error(f"Cannot open port '{comPortName}' - "
+                      f"interface does not exist in the system (device unplugged?)")
+        else: log.error(error)
+        return True
 
     @contextmanager
     def reopen(self):
-        was_open = self.is_open
-        if was_open: self.close()
-        yield self
-        if was_open: self.open()
+        if self.is_open:
+            yield self
+        else:
+            self.close()
+            yield self
+            self.open()
 
 
 class PelengTransceiver(SerialTransceiver):
@@ -122,7 +129,7 @@ class PelengTransceiver(SerialTransceiver):
             if (not self.addLRC):
                 return sendPacketFunction
             else:
-                from Utils import lrc
+                from .checksums import lrc
 
                 @wraps(sendPacketFunction)
                 def sendPacketWrapper(wrappee_self, msg, *args, **kwargs):
