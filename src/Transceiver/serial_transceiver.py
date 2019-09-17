@@ -78,13 +78,15 @@ class SerialTransceiver(serial.Serial):
         if ("Port is already open." == error.args[0]):
             log.warning(f"Port {self.port} is already opened - error skipped")
             return False
-        comPortName = error.args[0].split("'", maxsplit=2)[1]
-        if ('PermissionError' in error.args[0]):
-            log.error(f"Cannot open port '{comPortName}' - "
-                      f"interface is occupied by another recourse (different app is using that port?)")
-        elif ('FileNotFoundError' in error.args[0]):
-            log.error(f"Cannot open port '{comPortName}' - "
-                      f"interface does not exist in the system (device unplugged?)")
+        if 'COM' in error.args[0]:
+            comPortName = error.args[0].split("'", maxsplit=2)[1]
+            if ('PermissionError' in error.args[0]):
+                log.error(f"Cannot open port '{comPortName}' - "
+                          f"interface is occupied by another recourse (different app is using that port?)")
+            elif ('FileNotFoundError' in error.args[0]):
+                log.error(f"Cannot open port '{comPortName}' - "
+                          f"interface does not exist in the system (device unplugged?)")
+            else: log.error(error)
         else: log.error(error)
         return True
 
