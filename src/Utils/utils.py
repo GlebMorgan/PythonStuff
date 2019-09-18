@@ -418,8 +418,8 @@ def formatDict(d: dict, indent=4, level=0, limit=None):
     return linesep.join(chain('{', iteritems(shortd, trimmed = len(d) != len(shortd)), (addIndent('}', level),)))
 
 
-def formatList(seq):
-    return linesep.join(str(item) for item in seq)
+def formatList(seq, indent=0):
+    return linesep.join(' '*indent + str(item) for item in seq)
 
 
 def memo(f):
