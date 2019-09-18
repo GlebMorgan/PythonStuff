@@ -592,6 +592,36 @@ def ignoreErrors():
     except Exception: pass
 
 
+class Chain:
+    """ TODO: Chain class docstring """
+    def __init__(self, obj):
+        self.target = obj
+        self.methodname = None
+
+    def __getitem__(self, item: str):
+        """ getattribute() for internal use """
+        return object.__getattribute__(self, item)
+
+    def __getattribute__(self, item):
+        if item in ('ok', 'end', 'apply'):
+            return self['target']
+        if item.startswith('__') and item.endswith('__'):
+            return self[item]
+        self.methodname = item
+        method = getattr(self['target'], item)
+        if not hasattr(method, '__call__'):
+            raise TypeError(f"'{type(method).__name__}' object '{method}' is not callable")
+        return self
+
+    def __call__(self, *args, **kwargs):
+        # if self['method'].__func__(self['target'], *args, **kwargs) is not None:
+        if getattr(self['target'], self['methodname'])(*args, **kwargs) is not None:
+            raise RuntimeError(f"Method '{self['methodname']}' returned non-None value, cannot use Chain")
+        return self
+
+    def __repr__(self): return f"Chain wrapper of {self['target']} object at {hex(id(self))}"
+
+
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 
 

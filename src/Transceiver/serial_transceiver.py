@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from functools import wraps
 
 import serial
-from Utils import Logger, bytewise
+from Utils import Logger, bytewise, legacy
 from .checksums import rfc1071
 from .errors import *
 
@@ -89,6 +89,7 @@ class SerialTransceiver(serial.Serial):
                               f"interface does not exist in the system (device unplugged?)")
         return (True, error)
 
+    @legacy  # found out it is already implemented in Serial parameters property setters
     @contextmanager
     def reopen(self):
         if self.is_open:
