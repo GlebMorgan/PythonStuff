@@ -16,7 +16,6 @@ log = Logger("Colorer")
 # TODO: choose colors for blinking
 
 
-BACKGROUND_COLOR = 'white'
 BLINKING_DURATION = 120  # ms
 BLUR_RADIUS = 10
 FADE_TIME = 200  # ms
@@ -25,18 +24,19 @@ FADE_STAGES = 20
 
 class DisplayColor(Enum):
 
-    White = 'white'
-    Black = 'black'
-    Red = 'orangered'
-    Green = 'forestgreen'
-    Blue = 'mediumblue'
+    White = QColor('white')
+    Black = QColor('black')
+    Red = QColor('red')
+    Green = QColor('green')
+    Blue = QColor('mediumblue')
+    Orange = QColor('darkorange')
+    Violet = QColor('blueviolet')
+    Yellow = QColor('yellow')
+    Cyan = QColor('cyan')
 
-    HighlightGreen = 'limegreen'
-    HighlightBlue = 'deepskyblue'
-    HighlightRed = 'red'
-
-    Normal = 'black'
-    Background = BACKGROUND_COLOR
+    LightGreen = Green.lighter()
+    LightBlue = Blue.lighter()
+    LightRed = Red.lighter()
 
 
 class BlinkingValidator(QValidator):
@@ -47,7 +47,7 @@ class BlinkingValidator(QValidator):
 
     def validate(self, text, pos):
         state, text, pos = self.targetValidator.validate(text, pos)
-        if state == QValidator.Invalid: self.colorer.blink(DisplayColor.HighlightRed)
+        if state == QValidator.Invalid: self.colorer.blink(DisplayColor.Red)
         return state, text, pos
 
     def fixup(self, text):
@@ -77,7 +77,7 @@ class Colorer():
     """ ... TODO
         Should be initialized after validator is set.
             .patchValidator() should be called each time validator is changed
-        Change widget color with this object, direct .palette maniputations will break everything
+        Change widget color with this object, direct .palette manipulations will break everything
     """
 
     def __init__(self, widget: QWidget, base: QWidget = None):
@@ -94,7 +94,7 @@ class Colorer():
     def _createTimer_(self, period: int, callback: Callable) -> QTimer:
         timer = QTimer(self.owner)
         timer.setInterval(period)
-        timer.timeout.connect(callback)  # TODO: change function to proper one (does not exist yet)
+        timer.timeout.connect(callback)
         timer.savedWidgetColor: QColor = None
         timer.blinkingWidgetColor: QColor = None
         timer.blinkingStage: int = 0
