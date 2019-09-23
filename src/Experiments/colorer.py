@@ -1,4 +1,5 @@
 from __future__ import annotations as annotations_feature
+
 from enum import Enum
 from functools import wraps, partial, partialmethod
 from typing import Union, Dict, Callable
@@ -8,12 +9,8 @@ from PyQt5.QtGui import QColor, QPalette, QValidator
 from PyQt5.QtWidgets import QWidget, QGraphicsDropShadowEffect, QPushButton
 from Utils import Logger, legacy
 
+
 log = Logger("Colorer")
-
-
-# TESTME: buttons colorizing
-
-# TODO: choose colors for blinking
 
 
 BLINKING_DURATION = 120  # ms
@@ -55,7 +52,7 @@ class BlinkingValidator(QValidator):
 
 
 class colored:  # TESTME
-    """ Decorator """
+    """ Base decorator for blinking widgets based on decorated function output (dev) """
     def __init__(self, colorerMethod: Callable, colorer: QWidget, colorsMapping: Dict[str, DisplayColor]):
         self.colorer = colorer
         self.colorerMethod: Callable = colorerMethod
@@ -74,10 +71,17 @@ class colored:  # TESTME
 
 
 class Colorer():
-    """ ... TODO
-        Should be initialized after validator is set.
-            .patchValidator() should be called each time validator is changed
-        Change widget color with this object, direct .palette manipulations will break everything
+    """ Widget background coloring and blinking pseudo-animations module
+        Usage:
+            `.blink(color)` - blink with background.
+            `.blinkHalo(color)` - blink with glowing borders (color display is quite poor)
+            `.setBaseColor(color)` - set widget background color (use `DisplayColor.Light<colorname>` colors)
+            `.resetBaseColor()` - reset background color with one the widget had when class was instantiated
+            `.color([role=background])` - current static color getter (changes caused by blinking are not reflected)
+        Limitations:
+            • class should be initialized after validator is set.
+                `.patchValidator()` should be called each time validator is changed
+            • widget color must be changed with `.setColor()`, direct `.palette` manipulations will break everything
     """
 
     def __init__(self, widget: QWidget, base: QWidget = None):
@@ -88,6 +92,8 @@ class Colorer():
         self.savedBgColor: QColor = self.bgColor
         self.blinkHaloTimer: QTimer = self._createTimer_(BLINKING_DURATION//BLUR_RADIUS, self.unblinkHalo)
         self.blinkTimer: QTimer = self._createTimer_(FADE_TIME // FADE_STAGES, self.unblink)
+        self.blinking: bool = False  # blinking state
+        self.blinkingHalo = False  # halo blinking state
 
         QTimer().singleShot(0, self.patchValidator)
 
@@ -95,13 +101,12 @@ class Colorer():
         timer = QTimer(self.owner)
         timer.setInterval(period)
         timer.timeout.connect(callback)
-        timer.savedWidgetColor: QColor = None
-        timer.blinkingWidgetColor: QColor = None
-        timer.blinkingStage: int = 0
+        timer.widgetBlinkColor: QColor = None
+        timer.stage: int = 0
         return timer
 
     @staticmethod
-    def blendColor(base: QColor, overlay: QColor, stage: int):
+    def _blendColor_(base: QColor, overlay: QColor, stage: int):
         if not 0 <= stage <= FADE_STAGES:
             raise ValueError(f"Invalid stage: {stage}, expected [0..{FADE_STAGES}]")
         ratio = stage / FADE_STAGES
@@ -111,7 +116,9 @@ class Colorer():
         return QColor(red, green, blue)
 
     def setColor(self, role: QPalette.ColorRole, color: Union[DisplayColor, QColor, str], preserve=True):
-        """ Update `.owner` widget color component `role` with color `color` """
+        """ Update `.owner` widget color component `role` with color `color`
+            Background color changes are captured, unless explicitly specified not to `preserve` them
+        """
         if isinstance(color, DisplayColor): color = color.value
         palette = self.ownerBase.palette()
         palette.setColor(role, QColor(color))
@@ -120,23 +127,29 @@ class Colorer():
             self.savedBgColor = palette.color(role)
 
     def blink(self, color: DisplayColor):
+        """ Blink with background with smooth fade-out. Does not change `.color()` output.
+            `FADE_TIME` and `FADE_STAGES` global settings adjust quality and timing respectively
+        """
         self.blinkTimer.stage = FADE_STAGES
-        self.blinkTimer.savedWidgetColor = self.savedBgColor
-        print(self.blinkTimer.savedWidgetColor.name())
         self.blinkTimer.widgetBlinkColor = QColor(color.value)
-
         self.setColor(self.bgColorRole, color, preserve=False)
         self.blinkTimer.start()
+        self.blinking = True
 
     def unblink(self):
+        """ Decrease blinking color intensity one step (out of `FADE_STAGES`) and set timer for the next stage
+            If stages are over (`timer.stage == 0`), set owner widget background color
+                to its current idle state color (`.savedBgColor` / same as what `.color()` returns)
+        """
         timer = self.blinkTimer
         timer.stage -= 1
         if timer.stage <= 0:
             timer.stop()
-            self.setColor(self.bgColorRole, timer.savedWidgetColor, preserve=False)
+            self.setColor(self.bgColorRole, self.savedBgColor, preserve=False)
+            self.blinking = False
         else:
-            self.setColor(self.bgColorRole, self.blendColor(
-                    timer.savedWidgetColor, timer.widgetBlinkColor, timer.stage), preserve=False)
+            self.setColor(self.bgColorRole, self._blendColor_(
+                    self.savedBgColor, timer.widgetBlinkColor, timer.stage), preserve=False)
 
     def setHalo(self, color: Union[DisplayColor, QColor, str]):
         if isinstance(color, DisplayColor): color = color.value
@@ -148,22 +161,36 @@ class Colorer():
         self.owner.setGraphicsEffect(effect)
 
     def blinkHalo(self, color: DisplayColor):
+        """ Blink with glowing borders with smooth fade-out.
+            `BLINKING_DURATION` and `BLUR_RADIUS` global settings adjust timing and halo size respectively
+            NOTE: Early dev-state function, use .blink() for better look&feel
+        """
         self.setHalo(color)
         self.blinkHaloTimer.start()
+        self.blinkingHalo = True
 
     def unblinkHalo(self):
+        """ Set shadow graphics effect blur radius one step smaller and set timer for the next dimming step
+            If `.blurRadius ≤ 1`, remove effect from owner widget.
+        """
         effect = self.owner.graphicsEffect()
         if effect.blurRadius() <= 1:
             self.owner.setGraphicsEffect(None)
             self.blinkHaloTimer.stop()
+            self.blinkingHalo = False
         else:
             effect.setBlurRadius(effect.blurRadius() - 1)
 
     def patchValidator(self):
-        validator = self.owner.validator()
-        log.debug(f"Owner validator is {validator}")
+        """ Modify validator to blink on certain validation state changes (defined by `BlinkingValidator` logic)
+            Return boolean value denoting whether validator has been patched successfully
+        """
+        try: validator = self.owner.validator()
+        except AttributeError: return False
         if validator is not None:
             self.owner.setValidator(BlinkingValidator(self))
+            return True
+        else: return False
 
     def setBaseColor(self, color: Union[DisplayColor, QColor, str]):
         return self.setColor(self.bgColorRole, color)
@@ -171,5 +198,10 @@ class Colorer():
     def resetBaseColor(self):
         return self.setColor(self.bgColorRole, self.bgColor)
 
-    blinked = partial(colored, setHalo)  # decorator
-    colorized = partial(colored, setBaseColor)  # decorator
+    def color(self, role: QPalette.ColorRole = None):
+        if role == self.bgColorRole: return self.savedBgColor
+        if role is None: role = self.bgColorRole
+        return self.owner.palette().color(role)
+
+    blinked = partial(colored, setHalo)  # decorator  # TESTME
+    colorized = partial(colored, setBaseColor)  # decorator  # TESTME

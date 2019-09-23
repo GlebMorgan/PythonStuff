@@ -7,6 +7,11 @@ from .colored_logger import ColorHandler
 from .utils import bytewise
 
 
+# TODO: Add sub-loggers to enable/disable logging of specific parts of code
+
+# TODO: Coloring option based on logger instance, not logging level
+
+
 C = CRITICAL = FATAL = logging.CRITICAL
 E = ERROR = logging.ERROR
 W = WARN = WARNING = logging.WARNING
