@@ -2,7 +2,7 @@ from __future__ import annotations as annotations_feature
 
 from typing import ClassVar, Callable
 
-from ..Experiments.attr_tagging_dotnotation import *
+from src.Experiments.attr_tagging_dotnotation import *
 import unittest
 from orderedset import OrderedSet
 from attr import attrs, attr
