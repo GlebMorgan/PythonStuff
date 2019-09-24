@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from itertools import compress
 from os import linesep
-from os.path import join as joinpath, dirname, abspath, isdir, expandvars as envar
+from os.path import join as joinpath, dirname, abspath, basename, isdir, expandvars as envar
 from shutil import copyfile
 from typing import Dict, Type, Set
 
@@ -44,7 +44,7 @@ class ConfigLoader:
     section: str = None
 
     @classmethod
-    def load(cls, section: str, app: str = None):
+    def load(cls, section: str, app: str = None, force=False):
         """ Update class with config params retrieved from config file, if possible """
 
         if cls is ConfigLoader:
@@ -57,19 +57,18 @@ class ConfigLoader:
                                f"{cls.__mro__[-2].__name__}.path or {cls.__name__}.path should be provided")
 
         if not isdir(cls.path):
-            log.error(f"Application config path is invalid directory: {cls.path}")
-            return cls._useDefaultConfig_()
-        else:
-            cls.path = joinpath(cls.path, cls.filename)
+            raise ValueError(f"Application config path is invalid directory: {cls.path}")
 
         log.info(f"Fetching config for '{section}'...")
 
         cls.section = section
         CONFIG_CLASSES.add(cls)
 
-        if not CONFIGS_DICT:  # => call ConfigLoader for the first time => load config from .yaml file
-            log.debug(f"Loading config for '{cls.section}' from {cls.path}...")
-            if not cls._loadFromFile_():  # => non existent or empty file => no profit, use defaults
+        if force or not CONFIGS_DICT:
+            # Empty CONFIGS_DICT => .load() is called for the first time => load config from .yaml file
+            path = joinpath(cls.path, cls.filename)
+            log.debug(f"Loading config for '{cls.section}' from {path}...")
+            if not cls._loadFromFile_(path):  # => non existent or empty file => no profit, use defaults
                 return cls._useDefaultConfig_()
 
         try:
@@ -101,7 +100,7 @@ class ConfigLoader:
 
         cls.loaded = True
         log.info(f"Config '{cls.section}' loaded, {len(tuple(cls.params()))} items")
-        log.debug(f"Config '{cls.section}': {formatDict({name: getattr(cls, name) for name in cls.params()})}")
+        log.debug(f"{cls.__name__}: {formatDict({name: getattr(cls, name) for name in cls.params()})}")
 
     @classmethod
     def update(cls):
@@ -111,7 +110,7 @@ class ConfigLoader:
             CONSIDER: (True, 2, 3.0) == (1,2,3) as well as [1,2] != (1,2) => need to compare types as well
         """
         assert CONFIGS_DICT
-        if cls.ignoreUpdates:
+        if cls.ignoreUpdates is True:
             log.info(f"Section '{cls.section}': updates ignored by request")
             return None
 
@@ -126,9 +125,6 @@ class ConfigLoader:
         """ Save all config sections to config file if any have changed or if forced
             NOTE: Call this method before app exit
         """
-
-        if cls is ConfigLoader:
-            raise NotImplementedError(f"{cls.__name__} is intended to be used by subclassing")
 
         # ▼ Skip save on False. Used when necessity of save is acquired dynamically (ex: CFG.save(CFG.update()))
         if force is False:
@@ -157,27 +153,31 @@ class ConfigLoader:
         else:
             log.debug(f"Force saving config for sections {', '.join(sections)}")
 
+        path = joinpath(cls.path, cls.filename)
+
         log.debug(f"Creating backup config file {cls.filename + '.bak'}")
-        try: copyfile(cls.path, cls.path + '.bak')
-        except OSError as e: log.error(f"Failed to create backup config file: {e}")
+        cls.backup(path)
 
         log.debug(f"Saving config to file {cls.filename}")
         try:
-            with open(cls.path, 'w') as configFile:
+            with open(path, 'w') as configFile:
                 cls.loader.dump(CONFIGS_DICT, configFile)
                 log.info(f"Config saved for sections: {', '.join(sections)}")
         except (OSError, YAMLError) as e:
             log.error(f"Failed to save configuration file:{linesep}{e}")
 
     @classmethod
-    def revert(cls):
+    def backup(cls, path):
+        try: copyfile(path, path + '.bak')
+        except OSError as e: log.error(f"Failed to create backup config file: {e}")
+
+    @classmethod
+    def revert(cls, path):
         """ Restore config file from backup, if such is present """
-
-        log.debug(f"Reverting config from {cls.path + '.bak'}...")
-
-        try: copyfile(cls.path + '.bak', cls.path)
+        log.debug(f"Reverting config from {path + '.bak'}...")
+        try: copyfile(path + '.bak', path)
         except OSError as e:
-            log.error(f"Reverting from backup failed: {e}")
+            log.warning(f"Reverting from backup failed: {e}")
             return False
         else:
             log.info("Reverted from backup successfully")
@@ -191,40 +191,46 @@ class ConfigLoader:
     @classmethod
     def _useDefaultConfig_(cls):
         # Just return and use class attrs when querying config params
-        log.info(f"Using default config for '{cls.section}': {formatDict(*cls.params())}")
+        log.info(f"Using default config for '{cls.section}'")
 
     @classmethod
-    def _loadFromFile_(cls) -> bool:
+    def _loadFromFile_(cls, path) -> bool:
         """ Load dict of config sections from .yaml file to CONFIGS_DICT module variable,
-            return boolean value = failed/succeeded """
-
+            return boolean value = failed/succeeded
+        """
+        # ▼ Denotes whether `file` is a backup file
+        backup = path.endswith('.bak')
+        filetype = 'backup' if backup else 'config'
         try:
-            with open(cls.path) as configFile:
+            with open(path) as configFile:
                 # ▼ expect dict of config dicts in config file
                 configDict = cls.loader.load(configFile)
-                assert isinstance(configDict, dict), \
-                    (f"Config loader {cls.loader.__name__} returned invalid result type: {type(configDict)}")
                 if configDict is None:
-                    log.warning(f"Config file is empty")
-                    cls._addCurrentSection_()
-                    return False
+                    log.warning(f"{filetype.capitalize()} file is empty")
+                    return cls._loadFromBackup_(path) if not backup else False
+                if not isinstance(configDict, dict):
+                    log.error(f"Config loader {cls.loader.__class__.__name__} "
+                              f"returned invalid result type: {configDict.__class__.__name__}")
+                    return cls._loadFromBackup_(path) if not backup else False
                 else:
                     CONFIGS_DICT.update(configDict)
-                    log.debug(f"Config for {cls.section} loaded: {formatDict(configDict)}")
+                    log.debug(f"Config for '{cls.section}' loaded: {formatDict(configDict)}")
                     return True  # succeeded loading from file
         except YAMLError as e:
-            log.error(f"Failed to parse configuration file:{linesep}{e}")
+            log.error(f"Failed to parse {filetype} file:{linesep}{e}")
+            return cls._loadFromBackup_(path) if not backup else False
         except FileNotFoundError:
-            log.warning(f"Config file {cls.filename} not found")
-
-        # If failed loading from file:
-        if (cls.revert()):
-            log.debug(f"Loading backup config for {cls.section}...")
-            return cls._loadFromFile_()
-        else:
-            log.info(f"Creating new config section: {cls.section}...")
-            cls._addCurrentSection_()
+            log.warning(f"{filetype.capitalize()} file {basename(path)} not found")
             return False
+        finally:
+            if CONFIGS_DICT.get(cls.section) is None: cls._addCurrentSection_()
+
+    @classmethod
+    def _loadFromBackup_(cls, path):
+        log.debug(f"Loading backup config for '{cls.section}'...")
+        status = cls._loadFromFile_(path + '.bak')
+        if status is True: cls.revert(path)
+        return status
 
     @classmethod
     def _addCurrentSection_(cls):
