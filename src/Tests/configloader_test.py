@@ -2,6 +2,7 @@ import pytest
 
 from Experiments import configloader
 from Experiments.configloader import ConfigLoader
+from Utils import formatList
 from ruamel.yaml import YAML
 
 PATH = r"C:\Users\Peleng-HP\AppData\Roaming\.PelengTools\Tests\ConfigLoader"
@@ -12,9 +13,9 @@ savedState = {
     'filename': ConfigLoader.filename,
     'path': ConfigLoader.path,
     'loader': ConfigLoader.loader,
-    'loaded': ConfigLoader.loaded,
-    'ignoreUpdates': ConfigLoader.ignoreUpdates,
-    'section': ConfigLoader.section,
+    '_loaded_': ConfigLoader._loaded_,
+    '_ignoreUpdates_': ConfigLoader._ignoreUpdates_,
+    '_section_': ConfigLoader._section_,
 }
 
 def msg(e): return e.value.args[0]
@@ -89,11 +90,11 @@ def test_path_config():
     newDictKeys.remove('P2')
     newDictKeys.remove('P3')
 
-    assert initDictKeys + ['section', 'loaded'] == newDictKeys
+    assert initDictKeys + ['_section_', '_loaded_'] == newDictKeys
 
-    assert CONFIG.section == 'TEST'
+    assert CONFIG._section_ == 'TEST'
     assert configloader.CONFIG_CLASSES == {CONFIG}
-    assert configloader.CONFIGS_DICT == dict(TEST=dict(P1=CONFIG.P1, P2=list(CONFIG.P2), P3=CONFIG.P3))
+    assert configloader.CONFIGS_DICT == dict(TEST=dict(P1='str', P2=['a', 'b', 'c'], P3=42))
 
 
 @reset
@@ -122,7 +123,6 @@ def test_config_dict_exists():
 
 @reset
 def test_no_file_specified():
-    print('azaza ' + str(configloader.CONFIGS_DICT == {}))
     class CONFIG(ConfigLoader):
         P1 = 'string'
         P2 = ()
@@ -240,6 +240,51 @@ def test_force_load():
     assert CONFIG.I3 is True
 
 
+@reset
+def test_no_section():
+    class CONFIG(ConfigLoader):
+        P1 = 's'
+        P2 = ()
+        P3 = {'a': 4}
+    ConfigLoader.path = PATH
+    ConfigLoader.filename = 'testconfig_simple.yaml'
+
+    CONFIG.load('NEW')
+
+    assert CONFIG.P1 == 's'
+    assert CONFIG.P2 == ()
+    assert CONFIG.P3 == {'a': 4}
+    assert configloader.CONFIG_CLASSES == {CONFIG}
+    assert configloader.CONFIGS_DICT == dict(TEST=dict(P1='s', P2=(), P3={'a': 4}))
+
+
+@reset
+def test_check_invalid_types():
+    members = [1, 2, 3]
+    ConfigLoader.members = lambda: ((f'par{i}', item) for i, item in enumerate(members))
+    c = ConfigLoader._checkInvalidTypes_
+
+    print()
+    assert c() == set()
+
+    members = [0, [7, 8, 9], ('a', 'b'), None]
+    members.append([members[1], members[2], members[2]])
+    members.append(members)
+    print()
+    assert c() == set()
+
+    members = [0, [7, ..., 9], ('a', pytest), None, type("Class", (), {})()]
+    members.extend(([members[1], members[2], members[2]], type, print, {'x':42, 'y':(4,5), 'z':(b'FF',)}))
+    members[8]['p'] = members[8]
+    members.append(members)
+
+    print()
+    assert c() == {'par1[1]', 'par2[1]', 'par4', 'par6', 'par7'}
+
+    print(formatList(members, indent=4))
+
+
+
 # ——————————————————————————————————————————————— STOPPED HERE ——————————————————————————————————————————————————————— #
 
 
@@ -256,7 +301,7 @@ def _test_ignore_updates():  # TODO: ignoreUpdates concerns saving config
         I1 = 'ign'
         I2 = [1, 2, 3]
         I3 = False
-    IGNORED.ignoreUpdates = True
+    IGNORED.ignore()
 
     CONFIG.load('TEST')
     IGNORED.load('TEST2')
