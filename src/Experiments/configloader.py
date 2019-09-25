@@ -67,7 +67,7 @@ class ConfigLoader:
             displayList = formatList((f'{name}: {type(getattr(cls, name))}' for name in invalidAttrs), indent=4)
             raise TypeError(f"{cls.__name__} contains invalid attr types:{linesep}{displayList}")
 
-        log.info(f"Fetching config for '{section}'...")
+        log.info(f"Fetching config for '{section}' from {cls.filename}...")
 
         cls._section_ = section
         CONFIG_CLASSES.add(cls)
@@ -88,6 +88,7 @@ class ConfigLoader:
             cls._addCurrentSection_()
             return cls._useDefaultConfig_()
 
+        paramsLoaded = 0
         for parName, currPar in cls.members():
             try: newPar = configFileDict.pop(parName)
             except KeyError:
@@ -102,13 +103,17 @@ class ConfigLoader:
                         continue
                 setattr(cls, parName, newPar)
                 CONFIGS_DICT[cls._section_][parName] = newPar
+                paramsLoaded += 1
         if len(configFileDict) != 0:
             log.warning(f"Unexpected parameters found in configuration file: {', '.join(configFileDict)}")
             currSectionDict = CONFIGS_DICT[cls._section_]
             for par in configFileDict: del currSectionDict[par]
 
         cls._loaded_ = True
-        log.info(f"Config '{cls._section_}' loaded, {len(tuple(cls.params()))} items")
+        if paramsLoaded > 0: log.info(f"Config '{cls._section_}' loaded, {paramsLoaded} items")
+        else: log.warning(f"Nothing was loaded for '{cls._section_}' "
+                          f"from {cls.filename} (wrong section name specified?)")
+
         log.debug(f"{cls.__name__}: {formatDict({name: getattr(cls, name) for name in cls.params()})}")
 
     @classmethod
@@ -215,21 +220,21 @@ class ConfigLoader:
         while True:
             try: name, value = pending.pop(0)
             except IndexError: return invalid
-            print(f'{name} = {value}')
+            # print(f'{name} = {value}')
             if not isinstance(value, cls.SUPPORTED_TYPES):
-                print(f'{name}: invalid')
+                # print(f'{name}: invalid')
                 invalid.add(name)
             elif isiterable(value):
-                print(f'{name}: iterable')
+                # print(f'{name}: iterable')
                 if isinstance(value, dict): iterator = value.items()
                 else: iterator = enumerate(value)
                 for i, elem in iterator:
                     if any(elem is verified for verified in done) or elem is value:
-                        print(f'{name}[{i}]: dup')
+                        # print(f'{name}[{i}]: dup')
                         continue
                     pending.append((f'{name}[{i}]', elem))
             done.append(value)
-            print(f'{name}: done')
+            # print(f'{name}: done')
 
     @classmethod
     def _useDefaultConfig_(cls):

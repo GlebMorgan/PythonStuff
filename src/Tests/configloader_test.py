@@ -94,7 +94,7 @@ def test_path_config():
 
     assert CONFIG._section_ == 'TEST'
     assert configloader.CONFIG_CLASSES == {CONFIG}
-    assert configloader.CONFIGS_DICT == dict(TEST=dict(P1='str', P2=['a', 'b', 'c'], P3=42))
+    assert configloader.CONFIGS_DICT == dict(TEST=dict(P1='str', P2=('a', 'b', 'c'), P3=42))
 
 
 @reset
@@ -115,7 +115,7 @@ def test_config_dict_exists():
     CONFIG.load('TEST')
 
     assert configloader.CONFIG_CLASSES == {CONFIG}
-    assert configloader.CONFIGS_DICT == dict(TEST=dict(P1='str', P2=['a', 'b', 'c'], P3=42))
+    assert configloader.CONFIGS_DICT == dict(TEST=dict(P1='str', P2=('a', 'b', 'c'), P3=42))
     assert CONFIG.P1 == 'str'
     assert CONFIG.P2 == ('a', 'b', 'c')
     assert CONFIG.P3 == 42
@@ -148,7 +148,7 @@ def test_invalid_config_file():
     CONFIG.load('TEST')
 
     assert configloader.CONFIG_CLASSES == {CONFIG}
-    assert configloader.CONFIGS_DICT == dict(TEST=dict(P1=CONFIG.P1, P2=CONFIG.P2, P3=CONFIG.P3))
+    assert configloader.CONFIGS_DICT == dict(TEST=dict(P1='str', P2=('a', 'b', 'c'), P3=80))
 
 
 @reset
@@ -183,19 +183,19 @@ def test_nonexistent_config_file():
 
 
 @reset
-def test_revert_from_backup():
+def test_load_from_backup():
     class CONFIG(ConfigLoader):
         P1 = 'string'
         P2 = ()
         P3 = 0
     ConfigLoader.path = PATH
-    ConfigLoader.filename = 'testconfig_backup.yaml'
+    ConfigLoader.filename = 'testconfig_backup_only.yaml'
 
     CONFIG.load('TEST')
 
     assert CONFIG.P3 == 80
     assert configloader.CONFIG_CLASSES == {CONFIG}
-    assert configloader.CONFIGS_DICT == dict(TEST=dict(P1='str', P2=['a', 'b', 'c'], P3=80))
+    assert configloader.CONFIGS_DICT == dict(TEST=dict(P1='str', P2=('a', 'b', 'c'), P3=80))
 
 
 @reset
@@ -205,7 +205,7 @@ def test_invalid_backup_file():
         P2 = ()
         P3 = 0
     ConfigLoader.path = PATH
-    ConfigLoader.filename = 'testconfig_invalid.yaml'
+    ConfigLoader.filename = 'testconfig_invalid_backup.yaml'
 
     CONFIG.load('TEST')
 
@@ -217,9 +217,8 @@ def test_invalid_backup_file():
 @reset
 def test_force_load():
     class CONFIG(ConfigLoader):
-        P1 = 'string'
-        P2 = ()
-        P3 = 0
+        I1 = 'old'
+        I2 = (1, 2)
         I3 = False
     ConfigLoader.path = PATH
     ConfigLoader.filename = 'testconfig_simple.yaml'
@@ -233,10 +232,11 @@ def test_force_load():
     assert configloader.CONFIG_CLASSES == {CONFIG}
     assert configloader.CONFIGS_DICT == dict(
             TEST=dict(P1='str', P2=['a', 'b', 'c'], P3=42),
-            TEST2=dict(I3=True),
+            TEST2=dict(I1='new', I2=(9, 7), I3=True),
             TEST3=None
     )
-    assert CONFIG.P3 == 42
+    assert CONFIG.I1 == 'new'
+    assert CONFIG.I2 == (9, 7)
     assert CONFIG.I3 is True
 
 
@@ -255,7 +255,10 @@ def test_no_section():
     assert CONFIG.P2 == ()
     assert CONFIG.P3 == {'a': 4}
     assert configloader.CONFIG_CLASSES == {CONFIG}
-    assert configloader.CONFIGS_DICT == dict(TEST=dict(P1='s', P2=(), P3={'a': 4}))
+    assert configloader.CONFIGS_DICT == dict(
+            TEST=dict(P1='str', P2=['a', 'b', 'c'], P3=42),
+            NEW=dict(P1='s', P2=(), P3={'a': 4}),
+    )
 
 
 @reset
