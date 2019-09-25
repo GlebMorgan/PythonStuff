@@ -494,16 +494,24 @@ Null = type('NULL', (), {
 
 
 class isiterableMeta(type):
+    def __init__(cls, *args):
+        super().__init__(*args)
+        cls.type = None
     def __getitem__(cls, item):
         if not isinstance(item, type):
-            raise TypeError("Iterated type should be placed in square brackets")
+            raise TypeError(f"{item} is not a type")
         else: cls.type = item
-        return cls()
+        return cls
 class isiterable(metaclass=isiterableMeta):
-    def __call__(self, object):
-        try: iterator = iter(object)
+    """ Check whether `target` is iterable object (NOT considering 'str')
+        If type is given in [], check whether iteration over `target` generates objects of specified type
+    """
+    def __new__(self, target):
+        if isinstance(target, str): return False
+        try: iterator = iter(target)
         except TypeError: return False
-        else: return True if isinstance(next(iterator), self.type) else False
+        if self.type is None: return True
+        else: return True if all(isinstance(item, self.type) for item in target) else False
 
 
 def threaded(f):
@@ -626,7 +634,7 @@ class Chain:
 
 
 if __name__ == '__main__':
-    CHECK_ITEM = formatDict
+    CHECK_ITEM = isiterable
 
     if CHECK_ITEM == InternalNameShadingVerifier:
         shver = InternalNameShadingVerifier(internals=False)
@@ -698,11 +706,18 @@ if __name__ == '__main__':
         print(*(t.a, t.b, t.c, t.d))
 
     if CHECK_ITEM == isiterable:
-        print(isiterable[str]('value'))
-        print(isiterable[str](['a','g','t']))
-        print(isiterable[int]({1:'a', 2:'t'}))
-        print(isiterable[int]('wrong'))
-        print(isiterable[int](0))
+        print(isiterable[str]('value'))                 # False
+        print(isiterable[str](['a', 'g', 't']))         # True
+        print(isiterable[int]({1: 'a', 2: 't'}))        # True
+        print(isiterable[int]('wrong'))                 # False
+        print(isiterable[bool]((True, False, None)))    # False
+        print(isiterable[bool]((True, False, True)))    # True
+        print(isiterable[int](0))                       # False
+        print(isiterable(1))                            # False
+        print(isiterable((1, 2, 3)))                    # True
+        print(isiterable('abc'))                        # False
+        try: print(isiterable[all]('error'))            # Error
+        except TypeError as e: print(e.args[0])
 
     if CHECK_ITEM == formatDict:
         print(formatDict(sampledict, limit=4))
