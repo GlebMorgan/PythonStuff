@@ -41,6 +41,18 @@ log.setLevel('DEBUG')
 
 # TODO: Metaclass options setting through same |option syntax
 
+# TODO: Change |lazy descriptor logic to this:
+#           class SNPTest:
+#               ''' Same name property test '''
+#               @property
+#               def b(self):
+#                   try: return self.__dict__['b']
+#                   except KeyError:
+#                       print('computing result...')
+#                       result = 43
+#                       self.__dict__['b'] = result
+#                       return result
+
 # ———————————————————————————————————————————————————— ToCONSIDER ———————————————————————————————————————————————————— #
 
 # ✓ Factory option: is it needed? ——► stick with searching for .copy attr
