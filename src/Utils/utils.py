@@ -503,15 +503,15 @@ class isiterableMeta(type):
         else: cls.type = item
         return cls
 class isiterable(metaclass=isiterableMeta):
-    """ Check whether `target` is iterable object (NOT considering 'str')
+    """ Check whether `target` is iterable object (NOT considering 'str' and 'bytes')
         If type is given in [], check whether iteration over `target` generates objects of specified type
     """
     def __new__(self, target):
-        if isinstance(target, str): return False
+        if isinstance(target, (str, bytes)): return False
         try: iterator = iter(target)
         except TypeError: return False
         if self.type is None: return True
-        else: return True if all(isinstance(item, self.type) for item in target) else False
+        else: return True if all(isinstance(item, self.type) for item in iterator) else False
 
 
 def threaded(f):
@@ -706,19 +706,23 @@ if __name__ == '__main__':
         print(*(t.a, t.b, t.c, t.d))
 
     if CHECK_ITEM == isiterable:
-        print(isiterable[str]('value'))                 # False
-        print(isiterable[str](['a', 'g', 't']))         # True
-        print(isiterable[int]({1: 'a', 2: 't'}))        # True
-        print(isiterable[int]('wrong'))                 # False
-        print(isiterable[bool]((True, False, None)))    # False
-        print(isiterable[bool]((True, False, True)))    # True
-        print(isiterable[int](0))                       # False
-        print(isiterable(1))                            # False
-        print(isiterable((1, 2, 3)))                    # True
-        print(isiterable('abc'))                        # False
-        try: print(isiterable[all]('error'))            # Error
+        assert isiterable[str]('value') is False
+        assert isiterable[bytes](b'abcd') is False
+        assert isiterable[int](b'abcd') is False
+        assert isiterable[str](['a', 'g', 't']) is True
+        assert isiterable[bytes]([b'a', b'b', b'c']) is True
+        assert isiterable[int]({1: 'a', 2: 't'}) is True
+        assert isiterable[int]('wrong') is False
+        assert isiterable[bool]((True, False, None)) is False
+        assert isiterable[bool]((True, False, True)) is True
+        assert isiterable[int](0) is False
+        assert isiterable(1) is False
+        assert isiterable((1, 2, 3)) is True
+        assert isiterable('abc') is False
+        assert isiterable(b'abc') is False
+        try: print(isiterable[all]('error'))
         except TypeError as e: print(e.args[0])
+        else: assert False
 
     if CHECK_ITEM == formatDict:
         print(formatDict(sampledict, limit=4))
-
