@@ -1,4 +1,5 @@
-from os.path import join as joinpath, isfile
+from os import remove, rmdir
+from os.path import join as joinpath, isfile, isdir
 
 import pytest
 from Experiments import configloader
@@ -487,14 +488,86 @@ def test_save_simple():
     assert isfile(configFilePath+'.bak') is True
     assert configloader.CONFIGS_DICT == dict(SAVE=dict(P1=None, P2=(1,), P3={'a': 3}))
 
-    storedConfig = YAML(typ='safe').load(open(configFilePath))
+    with open(configFilePath) as file:
+        storedConfig = YAML(typ='safe').load(file)
 
     assert storedConfig == dict(SAVE=dict(P1=None, P2=[1], P3={'a': 3}))
 
 
+@reset
+def test_app_name():
+    class CONFIG(ConfigLoader, section='CONF'): pass
+    CONFIG.filename = 'testconfig_simple.yaml'
+    with pytest.raises(ValueError) as e:
+        CONFIG.load('Wrong')
+    assert msg(e).startswith("Config directory ['Wrong'] not found. Existing directories: ")
+    print(msg(e))
+
+    CONFIG.load('Tests\\ConfigLoader')
+
+    assert CONFIG.path == r"C:\Users\Peleng-HP\AppData\Roaming\.PelengTools\Tests\ConfigLoader"
 
 
+@reset
+def test_save_no_load():
+    class CONFIG(ConfigLoader, section='SAVE'):
+        A = {}
+    CONFIG.path = PATH
+    CONFIG.filename = 'testconfig_save_no_load.yaml'
 
+    assert CONFIG.updated is True
+
+    CONFIG.save()
+
+    assert CONFIG.updated is False
+    storedConfigPath = joinpath(PATH, 'testconfig_save_no_load.yaml')
+    assert isfile(storedConfigPath)
+
+    with open(storedConfigPath) as file:
+        storedConfig = YAML(typ='safe').load(file)
+
+    assert storedConfig == dict(SAVE={'A': {}})
+    assert configloader.CONFIGS_DICT == storedConfig
+
+    remove(storedConfigPath)
+
+
+@reset
+def test_auto_dir_creation():
+    class CONFIG(ConfigLoader, section='SAVE'):
+        A = {}
+    CONFIG.path = PATH
+    CONFIG.filename = 'save_auto_create.yaml'
+
+    CONFIG.load()
+
+    CONFIG.path = joinpath(PATH, 'test_auto_dir')
+
+    assert configloader.CONFIG_CLASSES == {CONFIG}
+    assert configloader.CONFIGS_DICT == dict(SAVE={'A': {}})
+    assert CONFIG.A == {}
+
+    assert CONFIG.updated is False
+    CONFIG.A['a'] = {}
+    assert CONFIG.updated is True
+
+    CONFIG.save()
+
+    assert isdir(CONFIG.path)
+    storedConfigPath = joinpath(CONFIG.path, CONFIG.filename)
+    assert isfile(storedConfigPath)
+
+    with open(storedConfigPath) as file:
+        storedConfig = YAML(typ='safe').load(file)
+
+    assert storedConfig == dict(SAVE={'A': {'a': {}}})
+    assert CONFIG.updated is False
+
+    remove(storedConfigPath)
+    rmdir(CONFIG.path)
+
+
+# TODO: load from multiple files (double load)
 
 
 # ——————————————————————————————————————————————— STOPPED HERE ——————————————————————————————————————————————————————— #

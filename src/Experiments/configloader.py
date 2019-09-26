@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from itertools import compress
-from os import linesep, makedirs
-from os.path import join as joinpath, dirname, abspath, basename, isdir, expandvars as envar, isfile
+from os import linesep, makedirs, listdir
+from os.path import join as joinpath, basename, isdir, expandvars as envar, isfile
 from shutil import copyfile
-from typing import Dict, Type, Set, Optional, List
+from typing import Dict, Type, Set
 
 from Utils import Logger, formatDict, formatList, isiterable, classproperty
 from ruamel.yaml import YAML, YAMLError
-
 
 # CONSIDER: Constrain assigning common settings to ConfigLoader attrs (like .filePath and .loader), not child class
 
@@ -28,6 +26,8 @@ class ConfigLoader:
         Only specified object types are allowed inside config
     """
 
+    LOADER='yaml'
+
     # ▼ Immutable types must have .copy() attr
     SUPPORTED_TYPES = (int, float, str, bytes, bool, tuple, list, dict, set, type(None))
 
@@ -40,8 +40,12 @@ class ConfigLoader:
 
     filename: str = 'config.yaml'
     path: str = None
-    loader = YAML(typ='safe')
-    loader.default_flow_style = False
+
+    if LOADER == 'yaml':
+        loader = YAML(typ='safe')
+        loader.default_flow_style = False
+    elif LOADER == 'json':
+        raise NotImplementedError('JSON loader needs testing!')
 
     # Initialized in successors:
     _loaded_: bool  # FIXME: deprecate this
@@ -63,6 +67,9 @@ class ConfigLoader:
 
         if app is not None:
             cls.path = joinpath(cls.CONFIG_FILE_BASE_PATH, app)
+            if not isdir(cls.path):
+                dirs = sorted(listdir(cls.CONFIG_FILE_BASE_PATH))
+                raise ValueError(f"Config directory ['{app}'] not found. Existing directories: {dirs or 'None'}")
         elif cls.path is None:
             raise RuntimeError("Application config directory path is not specified. "
                                f"{cls.__mro__[-2].__name__}.path or {cls.__name__}.path should be provided")
@@ -133,7 +140,8 @@ class ConfigLoader:
         if cls._ignoreUpdates_ is True:
             log.info(f"Section '{cls.__section__}': updates ignored by request")
             return None
-        return CONFIGS_DICT[cls.__section__] != dict(cls.members())
+        try: return CONFIGS_DICT[cls.__section__] != dict(cls.members())
+        except KeyError: return True
 
     @classmethod
     def save(cls, force: bool = None) -> bool:
@@ -148,9 +156,10 @@ class ConfigLoader:
         sections = tuple(configCls.__section__ for configCls in CONFIG_CLASSES)
 
         path = joinpath(cls.path, cls.filename)
-        if isfile(path):
+        if not isfile(path):
             if cls.AUTO_CREATE_CONFIG_FILE is False:
-                log.debug("{cls.__name__} is configured not to create initial config file")
+                log.debug("{cls.__name__} is configured not to create config file automatically")
+                return False
             else:
                 try: makedirs(cls.path, exist_ok=True)
                 except OSError as e:
@@ -168,24 +177,31 @@ class ConfigLoader:
 
         newConfigsDict = {cfgCls.__section__: dict(cfgCls.members()) for cfgCls in CONFIG_CLASSES}
 
-        log.debug(f"Creating backup config file {cls.filename + '.bak'}")
-        cls.createBackup(path)
+        if isfile(path): cls.createBackup(path)
 
-        log.debug(f"Saving config to file {cls.filename}")
+        log.debug(f"Saving config to file {cls.filename}...")
         try:
             with open(path, 'w') as configFile:
                 cls.loader.dump(newConfigsDict, configFile)
         except (OSError, YAMLError) as e:
             log.error(f"Failed to save configuration file:{linesep}{e}")
+            return False
         else:
             global CONFIGS_DICT
-            CONFIGS_DICT = newConfigsDict
+            CONFIGS_DICT = deepcopy(newConfigsDict)
             log.info(f"Config saved to {cls.filename}")
+            return True
 
     @classmethod
-    def createBackup(cls, path):
-        try: copyfile(path, path + '.bak')
-        except OSError as e: log.error(f"Failed to create backup config file: {e}")
+    def createBackup(cls, path) -> bool:
+        try:
+            copyfile(path, path + '.bak')
+        except OSError as e:
+            log.error(f"Failed to create backup config file: {e}")
+            return False
+        else:
+            log.debug(f"Created backup config {cls.filename + '.bak'}")
+            return True
 
     @classmethod
     def revert(cls, path):
@@ -275,14 +291,8 @@ class ConfigLoader:
 
     @classmethod
     def _addCurrentSection_(cls):
-        CONFIGS_DICT[cls.__section__] = dict(cls.members())
+        CONFIGS_DICT[cls.__section__] = deepcopy(dict(cls.members()))
         log.debug(f"New section added: {cls.__section__} {formatDict(CONFIGS_DICT[cls.__section__])}")
-
-    @classmethod
-    def _fileUpdateRequired_(cls): return any(not configClass._loaded_ for configClass in CONFIG_CLASSES)
-
-    @classmethod
-    def _fileUpdateSections_(cls): return tuple(cfgCls.__section__ for cfgCls in CONFIG_CLASSES if not cfgCls._loaded_)
 
     # @staticmethod
     # def _validateConfigFilePath_(path: str):
@@ -295,44 +305,9 @@ class ConfigLoader:
 
 
 if __name__ == '__main__':
-    class TestConfig(ConfigLoader):
-        P1 = 34
-        P2 = 'bla bla'
-        P3 = None
-        P4 = [1, 2, 3, 4, 5]
-        e = 'service'
-
-
-    class TestConfig2(ConfigLoader):
-        P1 = 'azaza'
-        P2 = ('a', 'b', 'c', 'd', 'e')
-        P3 = None
-        s = 'service2'
-
-
-    ConfigLoader.filename = 'testconfig.yaml'
-    wd = r"D:\GLEB\Python\ProtocolProxy\v02"
-
-    print(f"TestConfig dir: {formatDict(vars(TestConfig))}")
-    print(f"TestConfig2 dir: {formatDict(vars(TestConfig2))}")
-
-    TestConfig.load('APP', wd)
-    TestConfig2.load('TEST', wd)
-
-    print("TestConfig (loaded) params: \n" + linesep.join(
-            f"    {name} = {getattr(TestConfig, name)}" for name in TestConfig.params()))
-    print("TestConfig2 (loaded) params: \n" + linesep.join(
-            f"    {name} = {getattr(TestConfig2, name)}" for name in TestConfig2.params()))
-
-    input("Enter to save config...")
-
-    print(f"TestConfig.P2: {TestConfig.P1}")
-    print(f"TestConfig.P3: {TestConfig.P3}")
-
-    TestConfig.P1 = 'newP1'
-    TestConfig.P3 = 'newP2'
-
-    TestConfig.save()
-
-    print(f"TestConfig.P2: {TestConfig.P1}")
-    print(f"TestConfig.P3: {TestConfig.P3}")
+    try:
+        from os import system
+        system(r'cd ..\Tests && python -m pytest configloader_test.py -ra -vvv')
+    except Exception as e:
+        print(e)
+        input('...')
