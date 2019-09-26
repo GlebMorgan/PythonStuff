@@ -149,6 +149,7 @@ class AnnotationSpy(dict):
 
         # ▼ Skip dunder attrs, if configured accordingly
         if not ALLOW_DUNDER_ATTRS:
+            # ▼ TODO: replace this with enum._is_dunder()
             if attrname.startswith('__') and attrname.endswith('__'):
                 return super().__setitem__(attrname, annotation)
 
