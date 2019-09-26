@@ -630,11 +630,22 @@ class Chain:
     def __repr__(self): return f"Chain wrapper of {self['target']} object at {hex(id(self))}"
 
 
+class classproperty:
+    """ Decorator implementing a class-level read-only property """
+    def __init__(self, func):
+        self.__func__ = func
+        self.__doc__ = func.__doc__
+
+    def __get__(self, instance, cls=None):
+        if cls is None:
+            cls = type(instance)
+        return self.__func__(cls)
+
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 
 
 if __name__ == '__main__':
-    CHECK_ITEM = isiterable
+    CHECK_ITEM = classproperty
 
     if CHECK_ITEM == InternalNameShadingVerifier:
         shver = InternalNameShadingVerifier(internals=False)
@@ -726,3 +737,17 @@ if __name__ == '__main__':
 
     if CHECK_ITEM == formatDict:
         print(formatDict(sampledict, limit=4))
+
+    if CHECK_ITEM == classproperty:
+        class A:
+            @classproperty
+            def p(cls):
+                print('p')
+                return 1
+
+        print(A.p)
+        A.p = 3
+        print(A.p)
+
+
+
