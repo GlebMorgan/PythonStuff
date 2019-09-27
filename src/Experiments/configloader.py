@@ -9,8 +9,6 @@ from typing import Dict, Type, Set
 from Utils import Logger, formatDict, formatList, isiterable, classproperty
 from ruamel.yaml import YAML, YAMLError
 
-# CONSIDER: Constrain assigning common settings to ConfigLoader attrs (like .filePath and .loader), not child class
-
 
 log = Logger("Config")
 
@@ -82,14 +80,13 @@ class ConfigLoader:
             displayList = formatList((f'{name}: {type(getattr(cls, name))}' for name in invalidAttrs), indent=4)
             raise TypeError(f"{cls.__name__} contains invalid attr types:{linesep}{displayList}")
 
-        log.info(f"Fetching config for '{cls.__section__}' from {cls.filename}...")
+        log.info(f"Fetching config for '{cls.__section__}'...")
 
         if force or not CONFIGS_DICT:
             # Empty CONFIGS_DICT => .load() is called for the first time => load config from file
+            log.debug(f"Config path: {cls.path}")
             path = joinpath(cls.path, cls.filename)
-            log.debug(f"Loading config from {path}...")
             if not cls._loadFromFile_(path):
-                log.info(f"Loading backup config...")
                 if not cls._loadFromFile_(path + '.bak', backup=True):
                     cls._addCurrentSection_()
                     return cls._useDefaultConfig_()
@@ -168,27 +165,29 @@ class ConfigLoader:
                 else: log.debug(f"Created directory {cls.path}")
 
         if not force:
-            updatedSections = tuple(cfgCls.__section__ for cfgCls in CONFIG_CLASSES if cfgCls.updated is True)
-            if updatedSections == ():
+            updatedConfigs = tuple(cfgCls for cfgCls in CONFIG_CLASSES if cfgCls.updated is True)
+            if updatedConfigs == ():
                 log.info("No config changes in all sections – save skipped")
                 return False
-            else: log.info(f"Updated sections: {', '.join(updatedSections)}")
-        else: log.debug(f"Force saving config for sections {', '.join(sections)}")
+            else: log.info(f"Updated sections: {', '.join(cfg.__section__ for cfg in updatedConfigs)}")
+        else:
+            updatedConfigs = CONFIG_CLASSES
+            log.debug(f"Force saving config for sections {', '.join(sections)}")
 
-        newConfigsDict = {cfgCls.__section__: dict(cfgCls.members()) for cfgCls in CONFIG_CLASSES}
+        newConfigsDict = {cfgCls.__section__: dict(cfgCls.members()) for cfgCls in updatedConfigs}
+        global CONFIGS_DICT
+        CONFIGS_DICT.update({key: deepcopy(cfg) for key, cfg in newConfigsDict.items()})
 
         if isfile(path): cls.createBackup(path)
 
         log.debug(f"Saving config to file {cls.filename}...")
         try:
-            with open(path, 'w') as configFile:
-                cls.loader.dump(newConfigsDict, configFile)
+            with open(path, 'w', encoding='utf-8') as configFile:
+                cls.loader.dump(CONFIGS_DICT, configFile)
         except (OSError, YAMLError) as e:
             log.error(f"Failed to save configuration file:{linesep}{e}")
             return False
         else:
-            global CONFIGS_DICT
-            CONFIGS_DICT = deepcopy(newConfigsDict)
             log.info(f"Config saved to {cls.filename}")
             return True
 
@@ -267,20 +266,27 @@ class ConfigLoader:
         """
         # ▼ Denotes whether `file` is a backup file
         filetype = 'backup' if backup else 'config'
+        log.info(f"Loading {filetype} from {cls.filename}...")
         try:
-            with open(path) as configFile:
+            with open(path, encoding='utf-8') as configFile:
                 # ▼ expect dict of config dicts in config file
-                configDict = cls.loader.load(configFile)
-                if configDict is None:
+                configsDict = cls.loader.load(configFile)
+                if configsDict is None:
                     log.warning(f"{filetype.capitalize()} file is empty")
                     return False
-                if not isinstance(configDict, dict):
+                if not isinstance(configsDict, dict):
                     log.error(f"Config loader {cls.loader.__class__.__name__} "
-                              f"returned invalid result type: {configDict.__class__.__name__}")
+                              f"returned invalid result type: {configsDict.__class__.__name__}")
                     return False
                 else:
-                    CONFIGS_DICT.update(configDict)
-                    log.debug(f"Config loaded: {formatDict(configDict)}")
+                    global CONFIGS_DICT
+                    if not CONFIGS_DICT:
+                        CONFIGS_DICT = {key: cfg if cfg is not None else {} for key, cfg in configsDict.items()}
+                    else:
+                        for section, config in configsDict.items():
+                            sectionDict = CONFIGS_DICT.setdefault(section, {})
+                            if config is not None: sectionDict.update(config)
+                    log.debug(f"Config loaded: {formatDict(configsDict)}")
                     return True  # succeeded loading from file
         except YAMLError as e:
             log.error(f"Failed to parse {filetype} file:{linesep}{e}")

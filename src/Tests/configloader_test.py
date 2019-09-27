@@ -1,10 +1,11 @@
 from os import remove, rmdir
 from os.path import join as joinpath, isfile, isdir
+from shutil import copyfile
 
 import pytest
 from Experiments import configloader
 from Experiments.configloader import ConfigLoader
-from Utils import formatList
+from Utils import formatList, formatDict
 from ruamel.yaml import YAML
 
 PATH = r"C:\Users\Peleng-HP\AppData\Roaming\.PelengTools\Tests\ConfigLoader"
@@ -227,7 +228,7 @@ def test_force_load():
     assert configloader.CONFIGS_DICT == dict(
             TEST=dict(P1='str', P2=['a', 'b', 'c'], P3=42),
             TEST2=dict(I1='new', I2=(9, 7), I3=True),
-            TEST3=None
+            TEST3={}
     )
     assert CONFIG.I1 == 'new'
     assert CONFIG.I2 == (9, 7)
@@ -567,36 +568,147 @@ def test_auto_dir_creation():
     rmdir(CONFIG.path)
 
 
-# TODO: load from multiple files (double load)
+@reset
+def test_mult_load():
+    class CONFIG(ConfigLoader, section='M_LOAD'):
+        P1 = 's'
+        P2 = ()
+        P3 = {'a': 4}
+    ConfigLoader.path = PATH
+    ConfigLoader.filename = 'testconfig_mult_load.yaml'
 
+    file_contents = '\n'.join([
+        "M_LOAD:",
+        "  P1: ''",
+        "  P2: [1]",
+        "",
+    ])
+    configFilePath = joinpath(ConfigLoader.path, 'testconfig_mult_load.yaml')
+    with open(configFilePath, 'w') as file:
+        file.write(file_contents)
+        file.flush()
 
-# ——————————————————————————————————————————————— STOPPED HERE ——————————————————————————————————————————————————————— #
+    file2_contents = '\n'.join([
+        "M_LOAD:",
+        "  P3: {'a': 0}",
+        "",
+    ])
+    configFile2Path = joinpath(ConfigLoader.path, 'testconfig2_mult_load.yaml')
+    with open(configFile2Path, 'w') as file:
+        file.write(file2_contents)
+        file.flush()
+
+    CONFIG.filename = 'testconfig_mult_load.yaml'
+    CONFIG.load()
+    CONFIG.filename = 'testconfig2_mult_load.yaml'
+    CONFIG.load(force=True)
+
+    assert CONFIG.P1 == ''
+    assert CONFIG.P2 == (1,)
+    assert CONFIG.P3 == {'a': 0}
+
+    assert configloader.CONFIGS_DICT == dict(M_LOAD=dict(P1='', P2=(1,), P3={'a': 0}))
+
+    remove(configFilePath)
+    remove(configFile2Path)
 
 
 @reset
-def _test_ignore_updates_unit():  # TODO: ignoreUpdates concerns saving config
+def test_mult_classes_load():
+    ConfigLoader.path = PATH
+    ConfigLoader.filename = 'testconfig_triple.yaml'
+
+    class CONF1(ConfigLoader, section='TEST'):
+        P1 = 'notstr'
+        P2 = ()
+        P3 = -42
+
+    class CONF2(ConfigLoader, section='TEST2'):
+        I1 = 'old'
+        I2 = [-9, -7]
+        I3 = None
+
+    CONF2.I3 = False
+    assert CONF1.updated is True
+    assert CONF2.updated is True
+
+    CONF1.load()
+    CONF2.load()
+
+    assert CONF1.updated is False
+    assert CONF2.updated is False
+    assert CONF1.P1 == 'str'
+    assert CONF1.P2 == ('a', 'b', 'c')
+    assert CONF1.P3 == 42
+    assert CONF2.I1 == 'new'
+    assert CONF2.I2 == [9, 7]
+    assert CONF2.I3 is True
+
+    assert configloader.CONFIG_CLASSES == {CONF1, CONF2}
+    assert configloader.CONFIGS_DICT == dict(
+            TEST=dict(P1='str', P2=('a', 'b', 'c'), P3=42),
+            TEST2=dict(I1='new', I2=[9, 7], I3=True),
+            TEST3={}
+    )
+
+
+@reset
+def test_ignore_updates_unit():  # TODO: ignoreUpdates concerns saving config
     class CONFIG(ConfigLoader, section='TEST'):
         P1 = 'string'
         P2 = ()
         P3 = 0
     ConfigLoader.path = PATH
-    ConfigLoader.filename = 'testconfig_triple.yaml'
+    ConfigLoader.filename = 'testconfig_save_triple.yaml'
+    copyfile(joinpath(PATH, 'testconfig_triple.yaml'), joinpath(PATH, 'testconfig_save_triple.yaml'))
 
-    class IGNORED(ConfigLoader, 'TEST2'):
+    class IGNORED(ConfigLoader, section='TEST2'):
         I1 = 'ign'
         I2 = [1, 2, 3]
         I3 = False
-    IGNORED.ignore()
 
     CONFIG.load()
     IGNORED.load()
 
+    assert CONFIG.updated is False
+    assert IGNORED.updated is False
     assert configloader.CONFIG_CLASSES == {CONFIG, IGNORED}
     assert configloader.CONFIGS_DICT == dict(
-            TEST = dict(P1='str', P2=['a', 'b', 'c'], P3=42),
-            TEST2 = dict(I1='new', I2=[9, 7], I3=True),
-            TEST3 = None
+            TEST=dict(P1='str', P2=('a', 'b', 'c'), P3=42),
+            TEST2=dict(I1='new', I2=[9, 7], I3=True),
+            TEST3={}
     )
-    assert IGNORED.I1 == 'ign'
-    assert IGNORED.I2 == [1, 2, 3]
-    assert IGNORED.I3 is False
+    assert CONFIG.P1 == 'str'
+    assert CONFIG.P2 == ('a', 'b', 'c')
+    assert CONFIG.P3 == 42
+    assert IGNORED.I1 == 'new'
+    assert IGNORED.I2 == [9, 7]
+    assert IGNORED.I3 is True
+
+    IGNORED.ignore()
+    CONFIG.P1 = 'strupd'
+    IGNORED.I1 = 'newupd'
+
+    assert CONFIG.updated is True
+    assert IGNORED.updated is None
+    assert CONFIG.P1 == 'strupd'
+    assert IGNORED.I1 == 'newupd'
+
+    CONFIG.save()
+
+    assert configloader.CONFIGS_DICT == dict(
+            TEST=dict(P1='strupd', P2=('a', 'b', 'c'), P3=42),
+            TEST2=dict(I1='new', I2=[9, 7], I3=True),
+            TEST3={}
+    )
+
+    with open(joinpath(ConfigLoader.path, ConfigLoader.filename)) as file:
+        storedConfig = YAML(typ='safe').load(file)
+
+    assert storedConfig == dict(
+            TEST=dict(P1='strupd', P2=['a', 'b', 'c'], P3=42),
+            TEST2=dict(I1='new', I2=[9, 7], I3=True),
+            TEST3={}
+    )
+
+    # remove(joinpath(PATH, 'testconfig_save_triple.yaml'))
