@@ -1,6 +1,6 @@
 from contextlib import contextmanager
 from functools import wraps
-from itertools import chain
+from itertools import chain as itertools_chain
 from os import linesep
 from typing import Union, Iterable
 from time import time
@@ -415,7 +415,11 @@ def formatDict(d: dict, indent=4, level=0, limit=None):
     if not d: return '{}'
     indent = ' ' * indent
     shortd = trimDict(d, limit) if limit else d
-    return linesep.join(chain('{', iteritems(shortd, trimmed = len(d) != len(shortd)), (addIndent('}', level),)))
+    return linesep.join(itertools_chain(
+            '{',
+            iteritems(shortd, trimmed = len(d) != len(shortd)),
+            (addIndent('}', level),)
+    ))
 
 
 def formatList(seq, indent=0):
@@ -569,6 +573,21 @@ def attachItem(iterable: Iterable, append=Null, prepend=Null):
     if append is not Null: yield append
 
 
+def chain(*items):
+    """ Extended itertools.chain()
+            • accepts single objects as well as iterables
+            • treats strings as objects, not iterables
+    """
+    for item in items:
+        try:
+            if isinstance(item, str): yield item
+            else: yield from item
+        except TypeError as err:
+            # ▼ Re-raise errors occurred in inner frames (inside item)
+            if err.__traceback__.tb_next is not None: raise err
+            yield item
+
+
 def die(msg: Union[int, str], errcode: int = 1):
     """ Display message 'msg', wait for a key press and exit with exit code 'errcode'
         If first parameter is integer number, it is interpreted as an error code,
@@ -582,7 +601,7 @@ def die(msg: Union[int, str], errcode: int = 1):
 
 
 def ask(msg, options=None):
-    """ TODO """
+    """ TODO: ask() helper function docstring """
     if not options:
         options = ['y', 'n']
     options = list(options)
