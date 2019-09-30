@@ -24,7 +24,7 @@ class ConfigLoader:
         Only specified object types are allowed inside config
     """
 
-    LOADER='yaml'
+    LOADER = 'yaml'
 
     # ▼ Immutable types must have .copy() attr
     SUPPORTED_TYPES = (int, float, str, bytes, bool, tuple, list, dict, set, type(None))
@@ -154,11 +154,12 @@ class ConfigLoader:
 
         path = joinpath(cls.path, cls.filename)
         if not isfile(path):
+            force = True
             if cls.AUTO_CREATE_CONFIG_FILE is False:
                 log.debug("{cls.__name__} is configured not to create config file automatically")
                 return False
-            else:
-                try: makedirs(cls.path, exist_ok=True)
+            elif not isdir(cls.path):
+                try: makedirs(cls.path)
                 except OSError as e:
                     log.error(f"Failed to create config directory tree:{linesep}{e}")
                     return False
