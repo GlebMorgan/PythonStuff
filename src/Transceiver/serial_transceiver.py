@@ -53,7 +53,9 @@ class SerialTransceiver(serial.Serial):
         try:
             this = super().__enter__()
         except SerialError as e:
-            self.handleSerialError(e)
+            status, msg = self.handleSerialError(e)
+            if status is True: raise SerialError(msg)
+            else: log.debug(msg)
             return self
         return this
 
