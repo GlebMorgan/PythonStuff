@@ -1,13 +1,13 @@
 from __future__ import annotations as annotations_feature
 
 from enum import Enum
-from functools import wraps, partial, partialmethod
+from functools import wraps, partial
 from typing import Union, Dict, Callable
 
 from PyQt5.QtCore import QTimer
 from PyQt5.QtGui import QColor, QPalette, QValidator
 from PyQt5.QtWidgets import QWidget, QGraphicsDropShadowEffect, QPushButton
-from Utils import Logger, legacy
+from Utils import Logger
 
 
 log = Logger("Colorer")
