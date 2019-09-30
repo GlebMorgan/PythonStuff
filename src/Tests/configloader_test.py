@@ -3,9 +3,7 @@ from os.path import join as joinpath, isfile, isdir
 from shutil import copyfile
 
 import pytest
-from Experiments import configloader
-from Experiments.configloader import ConfigLoader
-from Utils import formatList, formatDict
+from Utils import formatList, configloader, ConfigLoader
 from ruamel.yaml import YAML
 
 PATH = r"C:\Users\Peleng-HP\AppData\Roaming\.PelengTools\Tests\ConfigLoader"
