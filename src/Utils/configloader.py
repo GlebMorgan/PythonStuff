@@ -18,7 +18,8 @@ CONFIGS_DICT: Dict[str, dict] = {}
 
 
 class ConfigLoader:
-    """ When subclassed, stores all UPPERCASE (of which isupper() returns True)
+    """ Usage: class CONFIG(ConfigLoader, section='NAME')
+        When subclassed, stores all UPPERCASE (of which isupper() returns True)
         class attrs as dict of categories with config parameters
         and saves/loads them to/from .yaml file
         Only specified object types are allowed inside config
@@ -204,7 +205,7 @@ class ConfigLoader:
             return True
 
     @classmethod
-    def revert(cls, path):
+    def revert(cls, path=path):
         """ Restore config file from backup, if such is present """
         log.debug(f"Reverting config from {path + '.bak'}...")
         try: copyfile(path + '.bak', path)
