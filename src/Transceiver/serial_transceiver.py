@@ -99,6 +99,10 @@ class SerialTransceiver(serial.Serial):
             yield self
             self.open()
 
+    def format(self):
+            return (f"{self.__class__.__name__} ({'opened' if self.is_open else 'closed'}): "
+                    f"'{self.port}', {self.baudrate}, {self.bytesize}-{self.parity}-{self.stopbits}")
+
 
 class PelengTransceiver(SerialTransceiver):
     AUTO_LRC: bool = False
