@@ -4,21 +4,22 @@ import sys
 from contextlib import contextmanager
 from enum import Enum
 from functools import partial
-from os.path import expandvars as envar
-from pathlib import Path
+from os.path import expandvars as envar, dirname
 from typing import Union, Callable, List, Optional
+from serial.tools.list_ports_common import ListPortInfo as ComPortInfo
+from serial.tools.list_ports_windows import comports
+from pkg_resources import resource_filename, cleanup_resources, set_extraction_path
 
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QObject, QThread, QTimer, QRegularExpression as QRegex
 from PyQt5.QtGui import QFontMetrics, QKeySequence, QRegularExpressionValidator as QRegexValidator
 from PyQt5.QtGui import QIcon, QMovie, QColor
 from PyQt5.QtWidgets import QAction, QSizePolicy, QActionGroup
 from PyQt5.QtWidgets import QWidget, QApplication, QHBoxLayout, QComboBox, QPushButton, QLineEdit, QMenu, QLabel
-from PyQt5Utils.colorer import Colorer, DisplayColor
+
+from .colorer import Colorer, DisplayColor
+
 from Transceiver import SerialTransceiver, SerialError
 from Utils import Logger, formatList, ignoreErrors
-from pkg_resources import resource_filename, cleanup_resources, set_extraction_path
-from serial.tools.list_ports_common import ListPortInfo as ComPortInfo
-from serial.tools.list_ports_windows import comports
 
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 # TEMP TESTME TODO FIXME NOTE CONSIDER
@@ -39,7 +40,7 @@ from serial.tools.list_ports_windows import comports
 # Default layout spacing = 5
 # Default ContentsMargins = 12
 
-log = Logger("ComPanel")
+log = Logger("CommPanel")
 
 REFRESH_GIF = resource_filename(__name__, 'res/refresh.gif')
 
@@ -162,11 +163,10 @@ class CommMode(Enum):
 
 class SerialCommPanel(QWidget):
 
-    def __init__(self, parent, devInt, config=None, *args):
+    def __init__(self, parent, devInt, *args):
         super().__init__(parent, *args)
 
         # Core
-        self.configDir = config
         self.serialInt: SerialTransceiver = devInt
         self.actionList = super().actions
         self.comUpdaterThread: QThread = None
@@ -186,16 +186,13 @@ class SerialCommPanel(QWidget):
         self.comCombobox = self.newComCombobox()
         self.refreshPortsButton = self.newRefreshPortsButton()
         self.baudCombobox = self.newBaudCombobox()
-        self.bytesizeEdit = self.newDataFrameEdit(name='bytesize', chars=self.serialInt.BYTESIZES)
-        self.parityEdit = self.newDataFrameEdit(name='parity', chars=self.serialInt.PARITIES)
+        self.bytesizeEdit = self.newDataFrameEdit(name='bytesize', chars=SerialTransceiver.BYTESIZES)
+        self.parityEdit = self.newDataFrameEdit(name='parity', chars=SerialTransceiver.PARITIES)
         self.stopbitsEdit = self.newDataFrameEdit(name='stopbits', chars=(1, 2))
 
         self.setup()
 
     def setup(self):
-        if self.configDir is not None:
-            self.configDir.mkdir(parents=True, exist_ok=True)
-            set_extraction_path(self.configDir)
         self.initLayout()
         self.commButton.setFocus()
         self.updateComPortsAsync()
@@ -234,8 +231,8 @@ class SerialCommPanel(QWidget):
     def setActions(self):
         new = self.actions.new
 
-        self.actions.test = new(name='Test',
-                                slot=self.testSlot)
+        # self.actions.test = new(name='Test',
+        #                         slot=self.testSlot)  # TEMP
         self.actions.changePort = new(name='Change COM port',
                                       slot=lambda: self.changeSerialConfig('port', self.comCombobox))
         self.actions.refreshPorts = new(name='Refresh COM ports',
@@ -270,13 +267,13 @@ class SerialCommPanel(QWidget):
                 this.setToolTip("Send single packet")
             else: raise AttributeError(f"Unsupported mode '{mode.name}'")
 
-        this = QRightclickButton('Communication', self)
+        this = QRightclickButton('Connect', self)
         this.colorer = Colorer(this)
         this.updateState = updateState.__get__(this, this.__class__)  # bind method to commButton
         this.rclicked.connect(partial(self.dropStartButtonMenuBelow, this))
         this.clicked.connect(self.startCommunication)
         this.clicked.connect(this.updateState)
-        this.updateState()
+        if self.serialInt is not None: this.updateState()
         return this
 
     def newCommModeMenu(self):
@@ -336,7 +333,8 @@ class SerialCommPanel(QWidget):
         this.setSizeAdjustPolicy(this.AdjustToContents)
         this.maxChars = MAX_DIGITS
         # this.lineEdit().setStyleSheet('background-color: rgb(200, 200, 255)')
-        items = self.serialInt.BAUDRATES[self.serialInt.BAUDRATES.index(9600): self.serialInt.BAUDRATES.index(921600)+1]
+        bauds = SerialTransceiver.BAUDRATES
+        items = bauds[bauds.index(9600): bauds.index(921600)+1]
         this.addItems((str(num) for num in items))
         this.setMaxVisibleItems(len(items))
         with ignoreErrors(): this.setCurrentIndex(items.index(self.serialInt.DEFAULT_CONFIG['baudrate']))
@@ -353,7 +351,7 @@ class SerialCommPanel(QWidget):
         this = QSymbolLineEdit("X", self, symbols=chars)
         this.setAlignment(Qt.AlignCenter)
         this.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        this.setText(str(self.serialInt.DEFAULT_CONFIG[name]))
+        this.setText(str(SerialTransceiver.DEFAULT_CONFIG[name]))
         this.textEdited.connect(lambda text: this.setText(text.upper()))
         this.setValidator(QRegexValidator(QRegex('|'.join(chars), options=QRegex.CaseInsensitiveOption)))
         this.colorer = Colorer(this)
@@ -365,7 +363,6 @@ class SerialCommPanel(QWidget):
     def newTestButton(self):
         this = QRightclickButton('Test', self)
         this.clicked.connect(lambda: print("click on button!"))
-        this.lclicked.connect(self.actions.test.trigger)
         this.rclicked.connect(self.testSlot2)
         # this.setProperty('testField', True)
         this.colorer = Colorer(this)
@@ -555,6 +552,9 @@ class SerialCommPanel(QWidget):
 
 if __name__ == '__main__':
 
+    if len(log.handlers) == 2 and type(log.handlers[0] is type(log.handlers[1])):
+        del log.handlers[1]
+
     def trap_exc_during_debug(*args):
         raise RuntimeError(f'PyQt5 says "{args[1]}"')
     sys.excepthook = trap_exc_during_debug
@@ -569,7 +569,7 @@ if __name__ == '__main__':
     p.setWindowTitle('Simple COM Panel - dev')
     tr = SerialTransceiver()
 
-    cp = SerialCommPanel(p, tr, Path(envar('%APPDATA%'), '.PelengTools', 'ComPanel', 'temp'))
+    cp = SerialCommPanel(p, tr)
     cp.resize(100, 20)
     cp.move(300, 300)
     cp.bind(CommMode.Continuous, cp.testCommBinding)

@@ -6,7 +6,8 @@ from os.path import join as joinpath, basename, isdir, expandvars as envar, isfi
 from shutil import copyfile
 from typing import Dict, Type, Set
 
-from Utils import Logger, formatDict, formatList, isiterable, classproperty
+from .logger import Logger
+from .utils import formatDict, formatList, isiterable, classproperty
 from ruamel.yaml import YAML, YAMLError
 
 
