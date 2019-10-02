@@ -250,6 +250,7 @@ class SerialCommPanel(QWidget):
 
     def newCommButton(self):
         def updateState(this: QRightclickButton):
+            if self.serialInt is None: return
             mode = self.commMode
             if mode == CommMode.Continuous:
                 if self.serialInt.is_open:
@@ -305,6 +306,7 @@ class SerialCommPanel(QWidget):
         this.setInsertPolicy(QComboBox.NoInsert)
         # this.lineEdit().setStyleSheet('background-color: rgb(200, 255, 200)')
         this.setFixedWidth(QFontMetrics(self.font()).horizontalAdvance('000') + self.height())
+        this.colorer = Colorer(widget=this, base=this.lineEdit())
         this.triggered.connect(self.actions.changePort.trigger)
         this.setToolTip("COM port")
         # NOTE: .validator and .colorer are set in updateComCombobox()
@@ -313,14 +315,12 @@ class SerialCommPanel(QWidget):
     def newRefreshPortsButton(self):
         this = QSqButton(self)
         this.clicked.connect(self.actions.refreshPorts.trigger)
-
         this.setIcon(QIcon(REFRESH_GIF))
         this.setIconSize(this.sizeHint() - QSize(10, 10))
         this.anim = QMovie(REFRESH_GIF, parent=this)
         this.anim.frameChanged.connect(lambda: this.setIcon(QIcon(this.anim.currentPixmap())))
         if cleanup_resources() is not None:
-            log.warning(f"Failed to cleanup temporary resources: {cleanup_resources()}")
-
+            log.warning(f"Failed to cleanup temporary resources (refresh icon): {cleanup_resources()}")
         this.setToolTip("Refresh COM ports list")
         return this
 
@@ -441,7 +441,7 @@ class SerialCommPanel(QWidget):
                 combobox.contents = newPortNumbers
             currentComPortsRegex = QRegex('|'.join(combobox.contents), options=QRegex.CaseInsensitiveOption)
             combobox.setValidator(QRegexValidator(currentComPortsRegex))
-            combobox.colorer = Colorer(widget=combobox, base=combobox.lineEdit())
+            combobox.colorer.patchValidator()
             combobox.validator().changed.connect(lambda: log.warning("Validator().changed() triggered"))  # TEMP
             if combobox.view().isVisible():
                 combobox.hidePopup()
