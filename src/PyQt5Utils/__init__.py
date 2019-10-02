@@ -3,3 +3,4 @@ from .NotifyingValidator import Validator, NotifyingValidator
 from .WidgetColorer import Colorer
 from .com_panel import SerialCommPanel
 from .colorer import Colorer
+from .exhook import install_exhook
