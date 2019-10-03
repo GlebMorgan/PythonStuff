@@ -525,6 +525,15 @@ class SerialCommPanel(QWidget):
                             f"for '{self.commMode.name}' mode returned invalid status: {connStatus}")
         self.commButton.updateState()
 
+    def applySerialConfig(self):
+        for name, action in self.actions.items():
+            if not name.startswith('change'): continue
+            else: name = name.lstrip('change').lower()
+            value = str(getattr(self.serialInt, name))
+            if action.widget.text() != value:
+                action.widget.setText(value)
+                action.widget.colorer.blink(DisplayColor.Blue)
+
     @contextmanager
     def preservedSelection(self, widget: QWidget):
         try: textEdit = widget.lineEdit()
