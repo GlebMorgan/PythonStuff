@@ -235,21 +235,21 @@ class SerialCommPanel(QWidget):
         layout.addWidget(self.commButton)
         layout.addWidget(self.commModeButton)
         layout.addSpacing(spacing)
-        layout.addWidget(self.newLabel("COM", self))
+        layout.addWidget(self.newLabel("COM"))
         layout.addSpacing(smallSpacing)
         layout.addWidget(self.comCombobox)
         layout.addWidget(self.refreshPortsButton)
         layout.addSpacing(spacing)
-        layout.addWidget(self.newLabel("BAUD", self))
+        layout.addWidget(self.newLabel("BAUD"))
         layout.addSpacing(smallSpacing)
         layout.addWidget(self.baudCombobox)
         layout.addSpacing(spacing)
-        layout.addWidget(self.newLabel("FRAME", self))
+        layout.addWidget(self.newLabel("FRAME"))
         layout.addSpacing(smallSpacing)
         layout.addWidget(self.bytesizeEdit)
-        layout.addWidget(self.newLabel("–", self))
+        layout.addWidget(self.newLabel("–"))
         layout.addWidget(self.parityEdit)
-        layout.addWidget(self.newLabel("–", self))
+        layout.addWidget(self.newLabel("–"))
         layout.addWidget(self.stopbitsEdit)
         # layout.addSpacing(spacing)  # TEMP
         # layout.addWidget(self.testButton)  # TEMP
@@ -374,8 +374,8 @@ class SerialCommPanel(QWidget):
         this.setToolTip(name.capitalize())
         return this
 
-    def newLabel(self, text, parent):
-        this = QLabel(text, parent)
+    def newLabel(self, text):
+        this = QLabel(text, self)
         this.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         return this
 
