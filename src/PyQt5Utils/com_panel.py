@@ -189,11 +189,11 @@ class CommMode(Enum):
 
 class SerialCommPanel(QWidget):
 
-    def __init__(self, parent, devInt, *args):
+    def __init__(self, parent, devInt=None, *args):
         super().__init__(parent, *args)
 
         # Core
-        self.serialInt: SerialTransceiver = devInt
+        self.serialInt: SerialTransceiver = None
         self.actionList = super().actions
         self.comUpdaterThread: QThread = None
         self.commMode: CommMode = CommMode.Continuous
@@ -215,12 +215,14 @@ class SerialCommPanel(QWidget):
         self.parityEdit = self.newDataFrameEdit(name='parity', chars=SerialTransceiver.PARITIES)
         self.stopbitsEdit = self.newDataFrameEdit(name='stopbits', chars=(1, 2))
 
-        self.setup()
+        self.setup(devInt)
 
-    def setup(self):
+    def setup(self, interface):
         self.initLayout()
         self.commButton.setFocus()
         self.updateComPortsAsync()
+        self.setInterface(interface)
+        self.commButton.setFocus()
         self.setFixedSize(self.sizeHint())  # CONSIDER: SizePolicy is not working
         # self.setStyleSheet('background-color: rgb(200, 255, 200)')
 
@@ -279,7 +281,6 @@ class SerialCommPanel(QWidget):
         this.rclicked.connect(partial(self.dropStartButtonMenuBelow, this))
         this.clicked.connect(self.startCommunication)
         this.clicked.connect(this.updateState)
-        if self.serialInt is not None: this.updateState()
         return this
 
     def newCommModeMenu(self):
@@ -390,6 +391,10 @@ class SerialCommPanel(QWidget):
     def dropStartButtonMenuBelow(self, qWidget):
         self.commModeMenu.exec(self.mapToGlobal(qWidget.geometry().bottomLeft()))
 
+    def setInterface(self, interface):
+        self.serialInt = interface
+        self.commButton.updateState()
+
     def changeCommMode(self, action: Union[QAction, CommMode]):
         if isinstance(action, CommMode): mode = action
         else: mode = action.mode
@@ -397,6 +402,7 @@ class SerialCommPanel(QWidget):
         if mode == self.commMode:
             log.debug(f"Mode={mode.name} is already set — cancelling")
             return None
+
         log.debug(f"Changing communication mode to {mode}...")
         commBinding = self.commBindings[mode.name]
         try:
