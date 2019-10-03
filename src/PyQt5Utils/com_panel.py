@@ -208,21 +208,21 @@ class SerialCommPanel(QWidget):
         layout.addWidget(self.commButton)
         layout.addWidget(self.commModeButton)
         layout.addSpacing(spacing)
-        layout.addWidget(QLabel("COM", self))
+        layout.addWidget(self.newLabel("COM", self))
         layout.addSpacing(smallSpacing)
         layout.addWidget(self.comCombobox)
         layout.addWidget(self.refreshPortsButton)
         layout.addSpacing(spacing)
-        layout.addWidget(QLabel("BAUD", self))
+        layout.addWidget(self.newLabel("BAUD", self))
         layout.addSpacing(smallSpacing)
         layout.addWidget(self.baudCombobox)
         layout.addSpacing(spacing)
-        layout.addWidget(QLabel("FRAME", self))
+        layout.addWidget(self.newLabel("FRAME", self))
         layout.addSpacing(smallSpacing)
         layout.addWidget(self.bytesizeEdit)
-        layout.addWidget(QLabel("–", self))
+        layout.addWidget(self.newLabel("–", self))
         layout.addWidget(self.parityEdit)
-        layout.addWidget(QLabel("–", self))
+        layout.addWidget(self.newLabel("–", self))
         layout.addWidget(self.stopbitsEdit)
         # layout.addSpacing(spacing)  # TEMP
         # layout.addWidget(self.testButton)  # TEMP
@@ -337,7 +337,7 @@ class SerialCommPanel(QWidget):
         items = bauds[bauds.index(9600): bauds.index(921600)+1]
         this.addItems((str(num) for num in items))
         this.setMaxVisibleItems(len(items))
-        with ignoreErrors(): this.setCurrentIndex(items.index(self.serialInt.DEFAULT_CONFIG['baudrate']))
+        with ignoreErrors(): this.setCurrentIndex(items.index(SerialTransceiver.DEFAULT_CONFIG['baudrate']))
         this.setFixedWidth(QFontMetrics(self.font()).horizontalAdvance('0'*MAX_DIGITS) + self.height())
         log.debug(f"BaudCombobox: max items = {this.maxVisibleItems()}")
         this.triggered.connect(self.actions.changeBaud.trigger)
@@ -358,6 +358,11 @@ class SerialCommPanel(QWidget):
         this.editingFinished.connect(getattr(self.actions, f'change{name.capitalize()}').trigger)
         # this.setStyleSheet('background-color: rgb(255, 200, 200)')
         this.setToolTip(name.capitalize())
+        return this
+
+    def newLabel(self, text, parent):
+        this = QLabel(text, parent)
+        this.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         return this
 
     def newTestButton(self):
@@ -575,6 +580,7 @@ if __name__ == '__main__':
     cp.bind(CommMode.Continuous, cp.testCommBinding)
 
     l = QHBoxLayout()
+    # l.addWidget(QPushButton("Test", p))
     l.addWidget(cp)
     p.setLayout(l)
     p.show()
