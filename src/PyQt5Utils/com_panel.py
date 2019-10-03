@@ -161,6 +161,12 @@ class QHoldFocusComboBox(QComboBox):
             self.lineEdit().editingFinished.connect(
                 lambda: self.triggered.emit() if not self.view().hasFocus() else None))
 
+    def text(self):
+        return self.lineEdit().text()
+
+    def setText(self, text):
+        return self.lineEdit().setText(text)
+
 
 class QWorkerThread(QThread):
     done = pyqtSignal(object)
@@ -440,7 +446,7 @@ class SerialCommPanel(QWidget):
     def updateComCombobox(self, ports: List[ComPortInfo]):
         log.debug("Refreshing com ports combobox...")
         combobox = self.comCombobox
-        currentPort = combobox.currentText()
+        currentPort = combobox.text()
         newPortNumbers = tuple((port.device.strip('COM') for port in ports))
         if combobox.contents != newPortNumbers:
             with self.preservedSelection(combobox):
