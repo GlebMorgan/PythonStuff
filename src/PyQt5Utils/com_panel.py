@@ -475,32 +475,37 @@ class SerialCommPanel(QWidget):
         else:
             log.debug("COM ports refresh - no changes")
 
-    def changeSerialConfig(self, setting: str, widget: Union[QComboBox, QLineEdit]) -> Optional[bool]:
-        try: value = widget.currentText()
-        except AttributeError: value = widget.text()
-        # if setting == 'port' and self.comCombobox.view().hasFocus(): return None
-        if value == '':
-            log.debug(f"Serial {setting} is not chosen — cancelling")
-            return None
-        if setting == 'port': value = f'COM{value}'
+    def changeSerialConfig(self, setting: str) -> Optional[bool]:
+        value = self.sender().data()
+        colorer = self.sender().widget.colorer
         interface = self.serialInt
-        if value.isdecimal(): value = int(value)
+        if value is None: value = self.sender().widget.text()
+
+        if value == '':
+            log.debug(f"Serial setting '{setting}' is not chosen — cancelling")
+            return None
+        if setting == 'port':
+            value = f'COM{value}'
+
         currValue = getattr(interface, setting, None)
+        if value.isdecimal():
+            value = int(value)
         if value == currValue:
             log.debug(f"{setting.capitalize()}={value} is already set — cancelling")
             return None
+
         try:
             setattr(interface, setting, value)
         except SerialError as e:
             log.error(e)
             setattr(interface, setting, None)
             self.commButton.updateState()
-            widget.colorer.setBaseColor(DisplayColor.LightRed)
+            colorer.setBaseColor(DisplayColor.LightRed)
             return False
         else:
             log.info(f"Serial {setting} ——► {value}")
-            widget.colorer.resetBaseColor()
-            widget.colorer.blink(DisplayColor.Green)
+            colorer.resetBaseColor()
+            colorer.blink(DisplayColor.Green)
             return True
 
     def bind(self, mode: CommMode, function: Callable):
@@ -515,8 +520,9 @@ class SerialCommPanel(QWidget):
         connStatus = self.activeCommBinding()
         if connStatus is False:
             self.commButton.colorer.blink(DisplayColor.Red)
-        elif connStatus is True:
-            self.commButton.colorer.blink(DisplayColor.Green)
+        elif connStatus is not True:
+            raise TypeError(f"Communication binding .{self.activeCommBinding.__name__}() "
+                            f"for '{self.commMode.name}' mode returned invalid status: {connStatus}")
         self.commButton.updateState()
 
     @contextmanager
