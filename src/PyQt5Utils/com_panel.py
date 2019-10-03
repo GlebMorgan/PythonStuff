@@ -46,9 +46,14 @@ REFRESH_GIF = resource_filename(__name__, 'res/refresh.gif')
 
 
 class QDataAction(QAction):
-    def triggerWithData(self, data):
+    def __init__(self, *args, widget: QWidget):
+        super().__init__(*args)
+        self.widget = widget
+
+    def triggerString(self, data:str):
         self.setData(data)
         self.trigger()
+        self.widget.setText(data)
 
 
 class WidgetActions(dict):
@@ -65,9 +70,9 @@ class WidgetActions(dict):
         this = self.new(*args, **kwargs)
         setattr(self, id, this)
 
-    def new(self, name: str, slot: Callable = None,
+    def new(self, name: str, widget: QWidget = None, slot: Callable = None,
             shortcut: str = None, context: Qt.ShortcutContext = Qt.WindowShortcut):
-        this = QDataAction(name, self.owner)
+        this = QDataAction(name, self.owner, widget=widget)
         if slot:
             this.slot = slot
             this.triggered.connect(slot)
