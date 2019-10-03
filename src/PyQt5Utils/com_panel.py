@@ -115,12 +115,26 @@ class QSqButton(QPushButton):
 
 
 class QAutoSelectLineEdit(QLineEdit):
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.savedState = self.text()
+
     def mouseReleaseEvent(self, qMouseEvent):
         if qMouseEvent.button() == Qt.LeftButton and QApplication.keyboardModifiers() & Qt.ControlModifier:
             QTimer.singleShot(0, self.selectAll)
         elif qMouseEvent.button() == Qt.MiddleButton:
             QTimer.singleShot(0, self.selectAll)
         return super().mouseReleaseEvent(qMouseEvent)
+
+    def focusInEvent(self, qFocusEvent):
+        self.savedState = self.text()
+        return super().focusInEvent(qFocusEvent)
+
+    def focusOutEvent(self, qFocusEvent):
+        if self.text().strip() == '':
+            self.setText(self.savedState)
+        return super().focusOutEvent(qFocusEvent)
 
 
 class QSymbolLineEdit(QAutoSelectLineEdit):
