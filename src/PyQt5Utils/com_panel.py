@@ -63,12 +63,14 @@ class WidgetActions(dict):
 
     def addAction(self, action: QAction):
         self.owner.addAction(action)
-        setattr(self, action.text().lower(), action)
+        self[action.text().lower()] = action
         log.debug(f"Action '{action.text()}' created, id={action.text().lower()}")
+        return action
 
     def add(self, id: str, *args, **kwargs):
-        this = self.new(*args, **kwargs)
-        setattr(self, id, this)
+        action = self.new(*args, **kwargs)
+        self[id] = action
+        return action
 
     def new(self, name: str, widget: QWidget = None, slot: Callable = None,
             shortcut: str = None, context: Qt.ShortcutContext = Qt.WindowShortcut):
@@ -80,7 +82,6 @@ class WidgetActions(dict):
             this.setShortcut(QKeySequence(shortcut))
             this.setShortcutContext(context)
         self.owner.addAction(this)
-        self[name] = this
         return this
 
     def __getattr__(self, item):
@@ -177,7 +178,6 @@ class SerialCommPanel(QWidget):
         self.comUpdaterThread: QThread = None
         self.commMode: CommMode = CommMode.Continuous
         self.actions = WidgetActions(self)
-        self.setActions()
 
         # Bindings
         self.activeCommBinding = None  # active communication binding
@@ -232,26 +232,6 @@ class SerialCommPanel(QWidget):
         # layout.addSpacing(spacing)  # TEMP
         # layout.addWidget(self.testButton)  # TEMP
         self.setLayout(layout)
-
-    def setActions(self):
-        new = self.actions.new
-
-        # self.actions.test = new(name='Test',
-        #                         slot=self.testSlot)  # TEMP
-        self.actions.changePort = new(name='Change COM port',
-                                      slot=lambda: self.changeSerialConfig('port', self.comCombobox))
-        self.actions.refreshPorts = new(name='Refresh COM ports',
-                                        slot=self.updateComPortsAsync, shortcut=QKeySequence("Ctrl+R"))
-        self.actions.changeBaud = new(name='Change COM baudrate',
-                                      slot=lambda: self.changeSerialConfig('baudrate', self.baudCombobox))
-        self.actions.changeBytesize = new(name='Change COM bytesize',
-                                          slot=lambda: self.changeSerialConfig('bytesize', self.bytesizeEdit))
-        self.actions.changeParity = new(name='Change COM parity',
-                                        slot=lambda: self.changeSerialConfig('parity', self.parityEdit))
-        self.actions.changeStopbits = new(name='Change COM stopbits',
-                                          slot=lambda: self.changeSerialConfig('stopbits', self.stopbitsEdit))
-
-        log.debug(f"Actions:\n{formatList(action.text() for action in self.actions.values())}")
 
     def newCommButton(self):
         def updateState(this: QRightclickButton):
@@ -312,14 +292,18 @@ class SerialCommPanel(QWidget):
         # this.lineEdit().setStyleSheet('background-color: rgb(200, 255, 200)')
         this.setFixedWidth(QFontMetrics(self.font()).horizontalAdvance('000') + self.height())
         this.colorer = Colorer(widget=this, base=this.lineEdit())
-        this.triggered.connect(self.actions.changePort.trigger)
+        action = self.actions.add(id='setPort', name='Change COM port', widget=this,
+                                  slot=partial(self.changeSerialConfig, 'port'))
+        this.triggered.connect(action.trigger)
         this.setToolTip("COM port")
         # NOTE: .validator and .colorer are set in updateComCombobox()
         return this
 
     def newRefreshPortsButton(self):
         this = QSqButton(self)
-        this.clicked.connect(self.actions.refreshPorts.trigger)
+        action = self.actions.add(id='refreshPorts', name='Refresh COM ports',
+                                  slot=self.updateComPortsAsync, shortcut=QKeySequence("Ctrl+R"))
+        this.clicked.connect(action.trigger)
         this.setIcon(QIcon(REFRESH_GIF))
         this.setIconSize(this.sizeHint() - QSize(10, 10))
         this.anim = QMovie(REFRESH_GIF, parent=this)
@@ -345,7 +329,9 @@ class SerialCommPanel(QWidget):
         with ignoreErrors(): this.setCurrentIndex(items.index(SerialTransceiver.DEFAULT_CONFIG['baudrate']))
         this.setFixedWidth(QFontMetrics(self.font()).horizontalAdvance('0'*MAX_DIGITS) + self.height())
         log.debug(f"BaudCombobox: max items = {this.maxVisibleItems()}")
-        this.triggered.connect(self.actions.changeBaud.trigger)
+        action = self.actions.add(id='changeBaudrate', name='Change COM baudrate', widget=this,
+                                  slot=partial(self.changeSerialConfig, 'baudrate'))
+        this.triggered.connect(action.trigger)
         this.setValidator(QRegexValidator(QRegex(rf"[1-9]{{1}}[0-9]{{0,{MAX_DIGITS-1}}}"), this))
         this.colorer = Colorer(widget=this, base=this.lineEdit())
         this.setToolTip("Baudrate (speed)")
@@ -358,9 +344,11 @@ class SerialCommPanel(QWidget):
         this.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         this.setText(str(SerialTransceiver.DEFAULT_CONFIG[name]))
         this.textEdited.connect(lambda text: this.setText(text.upper()))
+        action = self.actions.add(id=f'change{name.capitalize()}', name=f'Change COM {name}', widget=this,
+                                  slot=partial(self.changeSerialConfig, name))
+        this.editingFinished.connect(action.trigger)
         this.setValidator(QRegexValidator(QRegex('|'.join(chars), options=QRegex.CaseInsensitiveOption)))
         this.colorer = Colorer(this)
-        this.editingFinished.connect(getattr(self.actions, f'change{name.capitalize()}').trigger)
         # this.setStyleSheet('background-color: rgb(255, 200, 200)')
         this.setToolTip(name.capitalize())
         return this
