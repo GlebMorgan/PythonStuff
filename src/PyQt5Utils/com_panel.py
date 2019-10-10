@@ -17,6 +17,8 @@ from PyQt5.QtWidgets import QAction, QSizePolicy, QActionGroup
 from PyQt5.QtWidgets import QWidget, QApplication, QHBoxLayout, QComboBox, QPushButton, QLineEdit, QMenu, QLabel
 
 from .colorer import Colorer, DisplayColor
+from .extended_widgets import QRightclickButton, QSqButton, QSymbolLineEdit, QAutoSelectLineEdit, QHoldFocusComboBox
+from .helpers import QWorkerThread
 
 from Transceiver import SerialTransceiver, SerialError
 from Utils import Logger, formatList, ignoreErrors, AttrEnum, legacy
@@ -91,97 +93,6 @@ class WidgetActions(dict):
         raise AttributeError(f"Action '{item}' does not exist")
 
 
-class QRightclickButton(QPushButton):
-    rclicked = pyqtSignal()
-    lclicked = pyqtSignal()
-    mclicked = pyqtSignal()
-
-    def mouseReleaseEvent(self, qMouseEvent):
-        super().mouseReleaseEvent(qMouseEvent)
-        if qMouseEvent.button() == Qt.RightButton:
-            self.rclicked.emit()
-        elif qMouseEvent.button() == Qt.LeftButton:
-            self.lclicked.emit()
-        elif qMouseEvent.button() == Qt.MiddleButton:
-            self.mclicked.emit()
-
-
-class QSqButton(QPushButton):
-    def __init__(self, *args):
-        super().__init__(*args)
-        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-
-    def sizeHint(self):
-        height = super().sizeHint().height()
-        return QSize(height, height)
-
-
-class QAutoSelectLineEdit(QLineEdit):
-
-    def __init__(self, *args):
-        super().__init__(*args)
-        self.savedState = self.text()
-
-    def mouseReleaseEvent(self, qMouseEvent):
-        super().mouseReleaseEvent(qMouseEvent)
-        if qMouseEvent.button() == Qt.LeftButton and QApplication.keyboardModifiers() & Qt.ControlModifier:
-            QTimer.singleShot(0, self.selectAll)
-        elif qMouseEvent.button() == Qt.MiddleButton:
-            QTimer.singleShot(0, self.selectAll)
-
-    def focusInEvent(self, qFocusEvent):
-        super().focusInEvent(qFocusEvent)
-        self.savedState = self.text()
-
-    def focusOutEvent(self, qFocusEvent):
-        super().focusOutEvent(qFocusEvent)
-        if self.validator().validate(self.text(), -1)[0] != QRegexValidator.Acceptable:
-            self.setText(self.savedState)
-
-
-class QSymbolLineEdit(QAutoSelectLineEdit):
-    def __init__(self, *args, symbols, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.symbols = tuple(str(item) for item in symbols)
-
-    def sizeHint(self):
-        if isinstance(self.symbols, str):
-            width = QFontMetrics(self.font()).horizontalAdvance(self.symbols)
-        else:
-            width = max(QFontMetrics(self.font()).horizontalAdvance(ch) for ch in self.symbols)
-        height = super().sizeHint().height()
-        self.setMaximumWidth(width+height/2)
-        return QSize(width+height/2, super().sizeHint().height())
-
-
-class QHoldFocusComboBox(QComboBox):
-    triggered = pyqtSignal()
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        QTimer.singleShot(0, lambda: self.lineEdit().editingFinished.connect(
-                lambda: self.triggered.emit() if not self.view().hasFocus() else None))
-
-    def text(self):
-        return self.lineEdit().text()
-
-    def setText(self, text):
-        return self.lineEdit().setText(text)
-
-
-class QWorkerThread(QThread):
-    done = pyqtSignal(object)
-
-    def __init__(self, *args, name=None, target):
-        super().__init__(*args)
-        self.function = target
-        if name is not None: self.setObjectName(name)
-
-    def run(self):
-        log.debug(f"Test thread ID: {int(QThread.currentThreadId())}")
-        self.done.emit(self.function())
-
-
 class CommMode(AttrEnum):
     __names__ = 'label', 'description', 'handler'
 
@@ -214,7 +125,7 @@ class SerialCommPanel(QWidget):
         self.commBindings = dict.fromkeys(CommMode.__members__.keys())
 
         # Widgets
-        # self.testButton = self.newTestButton()  # TEMP
+        self.testButton = self.newTestButton()  # TEMP
         self.commButton = self.newCommButton()
         self.commModeButton = self.newCommModeButton()
         self.commModeMenu = self.newCommModeMenu()
@@ -260,8 +171,8 @@ class SerialCommPanel(QWidget):
         layout.addWidget(self.parityEdit)
         layout.addWidget(self.newLabel("–"))
         layout.addWidget(self.stopbitsEdit)
-        # layout.addSpacing(spacing)  # TEMP
-        # layout.addWidget(self.testButton)  # TEMP
+        layout.addSpacing(spacing)  # TEMP
+        layout.addWidget(self.testButton)  # TEMP
         self.setLayout(layout)
 
     def newCommButton(self):
@@ -435,6 +346,7 @@ class SerialCommPanel(QWidget):
 
     @staticmethod
     def getComPortsList():
+        log.debug(f"Test thread ID: {int(QThread.currentThreadId())}")  # TESTME: will this print worker thread id?
         log.debug("Fetching com ports...")
         newComPorts: List[ComPortInfo] = comports()
         log.debug(f"New com ports list: {', '.join(port.device for port in newComPorts)} ({len(newComPorts)} items)")
