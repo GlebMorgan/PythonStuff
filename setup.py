@@ -2,8 +2,8 @@ from setuptools import setup
 
 setup(
     name='PyUtils',
-    version='1.1.3.post1',
-    package_dir = {'': 'src'},
+    version='1.1.4.dev1',
+    package_dir={'': 'src'},
     packages=['Utils', 'PyQt5Utils', 'Transceiver'],
     url='https://github.com/GlebMorgan/PythonStuff',
     license='',

@@ -1,6 +1,7 @@
 from contextlib import contextmanager
+from enum import Enum
 from functools import wraps
-from itertools import chain as itertools_chain
+from itertools import chain as itertools_chain, zip_longest
 from os import linesep
 from typing import Union, Iterable
 from time import time
@@ -660,11 +661,26 @@ class classproperty:
             cls = type(instance)
         return self.__func__(cls)
 
+
+class AttrEnum(Enum):
+    def __new__(cls, *args, **kwargs):
+        if not hasattr(cls, '__names__'):
+            raise ValueError("__names__ is not defined")
+        obj = object.__new__(cls)
+        obj._value_ = len(cls.__members__) + 1
+        return obj
+
+    def __init__(self, *args):
+        if len(args) > len(self.__names__):
+            raise TypeError(f"Too many arguments, expected {len(self.__names__)}")
+        for _parname, _par in zip_longest(self.__names__, args):
+            setattr(self, _parname, _par)
+
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 
 
 if __name__ == '__main__':
-    CHECK_ITEM = classproperty
+    CHECK_ITEM = AttrEnum
 
     if CHECK_ITEM == InternalNameShadingVerifier:
         shver = InternalNameShadingVerifier(internals=False)
@@ -767,6 +783,13 @@ if __name__ == '__main__':
         print(A.p)
         A.p = 3
         print(A.p)
+
+    if CHECK_ITEM == AttrEnum:
+        class TestEnum(AttrEnum):
+            __names__ = 'a', 'b', 'c'
+            a = 1,2,3
+            b = 'p', 'q'
+        print(TestEnum.a.c)
 
 
 

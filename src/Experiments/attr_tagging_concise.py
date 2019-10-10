@@ -53,6 +53,8 @@ log.setLevel('DEBUG')
 #                       self.__dict__['b'] = result
 #                       return result
 
+# TODO: Way to define api/internal methods and fields (other than by naming conventions)
+
 # ———————————————————————————————————————————————————— ToCONSIDER ———————————————————————————————————————————————————— #
 
 # ✓ Factory option: is it needed? ——► stick with searching for .copy attr
