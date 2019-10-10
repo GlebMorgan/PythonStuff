@@ -192,7 +192,9 @@ class Colorer():
             return True
         else: return False
 
-    def setBaseColor(self, color: Union[DisplayColor, QColor, str]):
+    def setBaseColor(self, color: Union[DisplayColor, QColor, str, None]):
+        """ If `color` is `None`, color is reset to stored background color (equivalent to `.resetBaseColor()`)"""
+        if color is None: color = self.bgColor
         return self.setColor(self.bgColorRole, color)
 
     def resetBaseColor(self):
