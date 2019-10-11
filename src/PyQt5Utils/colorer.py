@@ -13,10 +13,10 @@ from Utils import Logger
 log = Logger("Colorer")
 
 
-BLINKING_DURATION = 120  # ms
-BLUR_RADIUS = 10
-FADE_TIME = 200  # ms
-FADE_STAGES = 20
+FADE_TIME_HALO = 120  # ms
+BLUR_RADIUS = 10      # px
+FADE_TIME = 200       # ms
+STAGE_DURATION = 10   # ms
 
 
 class DisplayColor(Enum):
@@ -79,19 +79,22 @@ class Colorer():
             `.resetBaseColor()` - reset background color with one the widget had when class was instantiated
             `.color([role=background])` - current static color getter (changes caused by blinking are not reflected)
         Limitations:
-            • class should be initialized after validator is set.
+            • Class should be initialized after validator is set.
                 `.patchValidator()` should be called each time validator is changed
-            • widget color must be changed with `.setColor()`, direct `.palette` manipulations will break everything
+            • Widget color must be changed with `.setColor()` and .setBaseColor()`
+                Direct `.palette` manipulations WILL BREAK EVERYTHING
     """
 
-    def __init__(self, widget: QWidget, base: QWidget = None):
+    def __init__(self, widget: QWidget, base: QWidget = None, duration: int = FADE_TIME):
         self.owner: QWidget = widget
         self.ownerBase: QWidget = base if base is not None else widget
         self.bgColorRole = QPalette.Button if isinstance(self.ownerBase, QPushButton) else QPalette.Base
         self.bgColor: QColor = self.ownerBase.palette().color(self.bgColorRole)
         self.savedBgColor: QColor = self.bgColor
-        self.blinkHaloTimer: QTimer = self._createTimer_(BLINKING_DURATION//BLUR_RADIUS, self.unblinkHalo)
-        self.blinkTimer: QTimer = self._createTimer_(FADE_TIME // FADE_STAGES, self.unblink)
+        self.duration = duration
+        self.FADE_STAGES = self.duration // STAGE_DURATION
+        self.blinkHaloTimer: QTimer = self._createTimer_(FADE_TIME_HALO // BLUR_RADIUS, self.unblinkHalo)
+        self.blinkTimer: QTimer = self._createTimer_(STAGE_DURATION, self.unblink)
         self.blinking: bool = False  # blinking state
         self.blinkingHalo = False  # halo blinking state
 
@@ -105,11 +108,9 @@ class Colorer():
         timer.stage: int = 0
         return timer
 
-    @staticmethod
-    def _blendColor_(base: QColor, overlay: QColor, stage: int):
-        if not 0 <= stage <= FADE_STAGES:
-            raise ValueError(f"Invalid stage: {stage}, expected [0..{FADE_STAGES}]")
-        ratio = stage / FADE_STAGES
+    def _blendColor_(self, base: QColor, overlay: QColor, stage: int):
+        assert 0 <= stage <= self.FADE_STAGES, f"Invalid stage: {stage}, expected [0..{self.FADE_STAGES}]"
+        ratio = stage / self.FADE_STAGES
         red = base.red()*(1-ratio) + overlay.red()*ratio
         green = base.green()*(1-ratio) + overlay.green()*ratio
         blue = base.blue()*(1-ratio) + overlay.blue()*ratio
@@ -130,7 +131,7 @@ class Colorer():
         """ Blink with background with smooth fade-out. Does not change `.color()` output.
             `FADE_TIME` and `FADE_STAGES` global settings adjust quality and timing respectively
         """
-        self.blinkTimer.stage = FADE_STAGES
+        self.blinkTimer.stage = self.FADE_STAGES
         self.blinkTimer.widgetBlinkColor = QColor(color.value)
         self.setColor(self.bgColorRole, color, preserve=False)
         self.blinkTimer.start()
@@ -162,7 +163,7 @@ class Colorer():
 
     def blinkHalo(self, color: DisplayColor):
         """ Blink with glowing borders with smooth fade-out.
-            `BLINKING_DURATION` and `BLUR_RADIUS` global settings adjust timing and halo size respectively
+            `FADE_TIME_HALO` and `BLUR_RADIUS` global settings adjust timing and halo size respectively
             NOTE: Early dev-state function, use .blink() for better look&feel
         """
         self.setHalo(color)
