@@ -74,8 +74,8 @@ class WidgetActions(dict):
         self[id] = action
         return action
 
-    def new(self, name: str, widget: QWidget = None, slot: Callable = None,
-            shortcut: str = None, context: Qt.ShortcutContext = Qt.WindowShortcut):
+    def new(self, name: str, widget: QWidget = None, shortcut: str = None,
+            slot: Callable = None, context: Qt.ShortcutContext = Qt.WindowShortcut):
         this = QDataAction(name, self.owner, widget=widget)
         if slot:
             this.slot = slot
@@ -124,7 +124,7 @@ class SerialCommPanel(QWidget):
         self.commBindings = dict.fromkeys(CommMode.__members__.keys())
 
         # Widgets
-        self.indicator = QIndicator(self, 80)
+        self.indicator = QIndicator(self)
         self.commButton = self.newCommButton()
         self.commModeButton = self.newCommModeButton()
         self.commModeMenu = self.newCommModeMenu()
@@ -197,13 +197,16 @@ class SerialCommPanel(QWidget):
         this.colorer = Colorer(this)
         this.state = False
 
+        action = self.actions.add(id='communicate', name='Trigger communication/transaction',
+                                  widget=this, shortcut=QKeySequence("Ctrl+T"),
+                                  slot=lambda: getattr(self, self.commMode.handler)())
+        this.clicked.connect(action.trigger)
         # TODO: add action 'communicate' and add key shortcut 'Enter' to it
 
         this.setMode = setMode.__get__(this, this.__class__)  # bind method to commButton
         this.setState = setState.__get__(this, this.__class__)
 
         this.rclicked.connect(partial(self.dropStartButtonMenuBelow, this))
-        this.clicked.connect(lambda: getattr(self, self.commMode.handler)())
         self.commModeChanged.connect(this.setMode)
 
         this.setDisabled(True)
