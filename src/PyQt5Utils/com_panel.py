@@ -143,7 +143,9 @@ class SerialCommPanel(QWidget):
         self.setInterface(interface)
         self.updateComPortsAsync()
         self.setFixedSize(self.sizeHint())  # CONSIDER: SizePolicy is not working
-        self.commButton.setFocus()
+        self.setFocusPolicy(Qt.TabFocus)
+        self.setFocusProxy(self.commButton)
+        # self.commButton.setFocus()
         # self.setStyleSheet('background-color: rgb(200, 255, 200)')
 
     def initLayout(self):
