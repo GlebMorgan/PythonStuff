@@ -15,8 +15,6 @@ class Traceback(NamedTuple):
 
 def _excepthook_(exc_type, exc_value, exc_tb):
     enriched_tb = _add_missing_frames_(exc_tb) if exc_tb else exc_tb
-
-    print(dir(exc_tb.tb_frame))
     traceback.print_exception(exc_type, exc_value, enriched_tb)
 
 

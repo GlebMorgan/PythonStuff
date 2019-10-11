@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import QWidget, QApplication, QHBoxLayout, QComboBox, QPush
 
 from .colorer import Colorer, DisplayColor
 from .extended_widgets import QRightclickButton, QSqButton, QSymbolLineEdit, QAutoSelectLineEdit, QHoldFocusComboBox
+from .extended_widgets import QIndicator
 from .helpers import QWorkerThread
 
 from Transceiver import SerialTransceiver, SerialError
@@ -28,11 +29,11 @@ from Utils import Logger, formatList, ignoreErrors, AttrEnum, legacy
 
 # ✓ Tooltips
 
-# ? TODO: Check for actions() to be updated when I .addAction() to widget
+# ✗ Check for actions() to be updated when I .addAction() to widget
 
 # TODO: Keyboard-layout independence option
 
-# TODO: Transaction status indicator: blinks red (comm error), yellow (timeout), green (successfull transaction), etc.
+# ✓ Transaction status indicator: blinks red (comm error), yellow (timeout), green (successful transaction), etc.
 
 # ✓ Do not accept and apply value in combobox's lineEdit when drop-down is triggered
 
@@ -126,6 +127,7 @@ class SerialCommPanel(QWidget):
 
         # Widgets
         self.testButton = self.newTestButton()  # TEMP
+        self.indicator = QIndicator(self, 80)
         self.commButton = self.newCommButton()
         self.commModeButton = self.newCommModeButton()
         self.commModeMenu = self.newCommModeMenu()
@@ -152,6 +154,8 @@ class SerialCommPanel(QWidget):
         layout = QHBoxLayout()
         layout.setContentsMargins(*(smallSpacing,)*4)
         layout.setSpacing(0)
+
+        layout.addWidget(self.indicator)
         layout.addWidget(self.commButton)
         layout.addWidget(self.commModeButton)
         layout.addSpacing(spacing)
@@ -173,6 +177,7 @@ class SerialCommPanel(QWidget):
         layout.addWidget(self.stopbitsEdit)
         layout.addSpacing(spacing)  # TEMP
         layout.addWidget(self.testButton)  # TEMP
+
         self.setLayout(layout)
 
     def newCommButton(self):

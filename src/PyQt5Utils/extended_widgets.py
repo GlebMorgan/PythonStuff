@@ -1,6 +1,7 @@
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QTimer
 from PyQt5.QtGui import QRegularExpressionValidator as QRegexValidator, QFontMetrics
-from PyQt5.QtWidgets import QApplication, QPushButton, QComboBox, QLineEdit, QSizePolicy
+from PyQt5.QtWidgets import QApplication, QPushButton, QComboBox, QLineEdit, QSizePolicy, QRadioButton
+from .colorer import Colorer
 
 
 class QRightclickButton(QPushButton):
@@ -79,3 +80,19 @@ class QHoldFocusComboBox(QComboBox):
 
     def setText(self, text):
         return self.lineEdit().setText(text)
+
+
+class QIndicator(QRadioButton):
+    def __init__(self, parent, duration=120, *args):
+        super().__init__(parent, *args)
+        self.colorer = Colorer(self, duration=duration)
+        self.blink = self.colorer.blink
+        self.blinkHalo = self.colorer.blinkHalo
+
+    def sizeHint(self):
+        height = super().sizeHint().height()
+        return QSize(height, height)
+
+    def mousePressEvent(self, *args, **kwargs):
+        # CONSIDER: block built-in click event handlers rather than shut down the event entirely
+        return
