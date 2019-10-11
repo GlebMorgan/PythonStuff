@@ -48,7 +48,11 @@ class QAutoSelectLineEdit(QLineEdit):
 
     def focusOutEvent(self, qFocusEvent):
         super().focusOutEvent(qFocusEvent)
-        if self.validator().validate(self.text(), -1)[0] != QRegexValidator.Acceptable:
+        try:
+            result = self.validator().validate(self.text(), -1)[0] != QRegexValidator.Acceptable
+        except AttributeError:
+            result = self.text().strip() == ''
+        if result:
             self.setText(self.savedState)
 
 
@@ -86,6 +90,11 @@ class QIndicator(QRadioButton):
     def __init__(self, parent, duration=120, *args):
         super().__init__(parent, *args)
         self.colorer = Colorer(self, duration=duration)
+        self.setFocusPolicy(Qt.NoFocus)
+        self.setToolTip('Transactions indicator<br>'
+                        '<font color="green">ok</font> - '
+                        '<font color="orange">timeout</font> - '
+                        '<font color="red">error</font>')
         self.blink = self.colorer.blink
         self.blinkHalo = self.colorer.blinkHalo
 
