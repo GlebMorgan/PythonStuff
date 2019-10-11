@@ -1,6 +1,7 @@
+from contextlib import contextmanager
 from typing import Union
 
-from PyQt5.QtCore import QThread, pyqtSignal
+from PyQt5.QtCore import QThread, pyqtSignal, QObject
 from PyQt5.QtWidgets import QLayout, QWidget, QVBoxLayout, QHBoxLayout
 
 
@@ -36,3 +37,50 @@ class Block:
         elif isinstance(self.owner, QLayout):
             self.owner.addLayout(self.layout)
 
+
+@contextmanager
+def preservedSelection(widget: QWidget):
+    try: textEdit = widget.lineEdit()
+    except AttributeError: textEdit = widget
+
+    try:
+        selection = textEdit.selectedText()
+    except AttributeError:
+        raise ValueError(f"Widget {widget.__class__} seems to not support text selection")
+
+    if selection == '':
+        yield
+        return
+    else:
+        currentSelection = (textEdit.selectionStart(), len(selection))
+        yield selection
+        textEdit.setSelection(*currentSelection)
+
+
+@contextmanager
+def blockedSignals(qObject: QObject):
+    oldState = qObject.blockSignals(True)
+    try: yield
+    finally: qObject.blockSignals(oldState)
+
+
+@contextmanager
+def disabled(widget: QWidget):
+    widget.setDisabled(True)
+    widget.repaint()
+    try: yield
+    finally: widget.setDisabled(False)
+
+
+@contextmanager
+def pushed(widget: QWidget):
+    widget.setDown(True)
+    widget.repaint()
+    try: yield
+    finally: widget.setDown(False)
+
+
+def setFocusChain(owner: QWidget, *args: QWidget, loop=True):
+    for i in range(len(args) - 1):
+        owner.setTabOrder(args[i], args[i+1])
+    if loop: owner.setTabOrder(args[-1], args[0])

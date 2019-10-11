@@ -1,8 +1,6 @@
 from __future__ import annotations as annotations_feature
 
 import sys
-from contextlib import contextmanager
-from enum import Enum
 from functools import partial
 from os.path import expandvars as envar, dirname
 from typing import Union, Callable, List, Optional
@@ -10,7 +8,7 @@ from serial.tools.list_ports_common import ListPortInfo as ComPortInfo
 from serial.tools.list_ports_windows import comports
 from pkg_resources import resource_filename, cleanup_resources, set_extraction_path
 
-from PyQt5.QtCore import Qt, pyqtSignal, QSize, QObject, QThread, QTimer, QRegularExpression as QRegex, QCoreApplication
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, QObject, QThread, QTimer, QRegularExpression as QRegex
 from PyQt5.QtGui import QFontMetrics, QKeySequence, QRegularExpressionValidator as QRegexValidator
 from PyQt5.QtGui import QIcon, QMovie, QColor
 from PyQt5.QtWidgets import QAction, QSizePolicy, QActionGroup
@@ -19,13 +17,12 @@ from PyQt5.QtWidgets import QWidget, QApplication, QHBoxLayout, QComboBox, QPush
 from .colorer import Colorer, DisplayColor
 from .extended_widgets import QRightclickButton, QSqButton, QSymbolLineEdit, QAutoSelectLineEdit, QHoldFocusComboBox
 from .extended_widgets import QIndicator
-from .helpers import QWorkerThread
+from .helpers import QWorkerThread, pushed, blockedSignals, preservedSelection
 
 from Transceiver import SerialTransceiver, SerialError
 from Utils import Logger, formatList, ignoreErrors, AttrEnum, legacy
 
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
-# TEMP TESTME TODO FIXME NOTE CONSIDER
 
 # ✓ Tooltips
 
@@ -110,6 +107,7 @@ class SerialCommPanel(QWidget):
     serialConfigChanged = pyqtSignal(str, str)  # (setting name, new value)
     bindingChanged = pyqtSignal(CommMode)
 
+    Mode = CommMode  # to access CommMode available outside (for ex., in .bind())
 
     def __init__(self, parent, devInt=None, *args):
         super().__init__(parent, *args)
@@ -126,7 +124,6 @@ class SerialCommPanel(QWidget):
         self.commBindings = dict.fromkeys(CommMode.__members__.keys())
 
         # Widgets
-        self.testButton = self.newTestButton()  # TEMP
         self.indicator = QIndicator(self, 80)
         self.commButton = self.newCommButton()
         self.commModeButton = self.newCommModeButton()
@@ -137,6 +134,7 @@ class SerialCommPanel(QWidget):
         self.bytesizeEdit = self.newDataFrameEdit(name='bytesize', chars=SerialTransceiver.BYTESIZES)
         self.parityEdit = self.newDataFrameEdit(name='parity', chars=SerialTransceiver.PARITIES)
         self.stopbitsEdit = self.newDataFrameEdit(name='stopbits', chars=(1, 2))
+        self.testButton = self.newTestButton()  # TEMP
 
         self.setup(devInt)
 
@@ -196,6 +194,8 @@ class SerialCommPanel(QWidget):
         this = QRightclickButton('Connect', self)
         this.colorer = Colorer(this)
         this.state = False
+
+        # TODO: add action 'communicate' and add key shortcut 'Enter' to it
 
         this.setMode = setMode.__get__(this, this.__class__)  # bind method to commButton
         this.setState = setState.__get__(this, this.__class__)
@@ -384,8 +384,8 @@ class SerialCommPanel(QWidget):
         newPortNumbers = tuple((port.device.strip('COM') for port in ports))
 
         if combobox.contents != newPortNumbers:
-            with self.preservedSelection(combobox):
-                with self.blockedSignals(combobox):
+            with preservedSelection(combobox):
+                with blockedSignals(combobox):
                     combobox.clear()
                     combobox.addItems(newPortNumbers)
                 for i, port in enumerate(ports):
@@ -467,7 +467,7 @@ class SerialCommPanel(QWidget):
             self.commButton.setState(status)
 
         button = self.commButton
-        with self.pushed(button):
+        with pushed(button):
             status = self.commBindings[self.commMode.name](button.state)
             if status is None:
                 return
@@ -479,7 +479,7 @@ class SerialCommPanel(QWidget):
 
     def triggerTransaction(self):
         button = self.commButton
-        with self.pushed(button):
+        with pushed(button):
             status = self.commBindings[self.commMode.name]()
             if status is True: button.colorer.blink(DisplayColor.Green)
             elif status is False: button.colorer.blink(DisplayColor.Red)
@@ -513,44 +513,6 @@ class SerialCommPanel(QWidget):
         elif connStatus is not None:
             raise TypeError(f"Communication binding .{self.activeCommBinding.__name__}() "
                             f"for '{self.commMode.name}' mode returned invalid status: {connStatus}")
-
-    @contextmanager
-    def preservedSelection(self, widget: QWidget):
-        try: textEdit = widget.lineEdit()
-        except AttributeError: textEdit = widget
-
-        try:
-            selection = textEdit.selectedText()
-        except AttributeError:
-            raise ValueError(f"Widget {widget.__class__} seems to not support text selection")
-
-        if selection == '':
-            yield
-            return
-        else:
-            currentSelection = (textEdit.selectionStart(), len(selection))
-            yield selection
-            textEdit.setSelection(*currentSelection)
-
-    @contextmanager
-    def blockedSignals(self, qObject: QObject):
-        oldState = qObject.blockSignals(True)
-        try: yield
-        finally: qObject.blockSignals(oldState)
-
-    @contextmanager
-    def disabled(self, widget: QWidget):
-        widget.setDisabled(True)
-        widget.repaint()
-        try: yield
-        finally: widget.setDisabled(False)
-
-    @contextmanager
-    def pushed(self, widget: QWidget):
-        widget.setDown(True)
-        widget.repaint()
-        try: yield
-        finally: widget.setDown(False)
 
     def testCommBinding(self, state):
         from random import randint
