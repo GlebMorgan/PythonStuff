@@ -34,6 +34,7 @@ class DisplayColor(Enum):
     LightGreen = Green.lighter()
     LightBlue = Blue.lighter()
     LightRed = Red.lighter()
+    LightOrange = Orange.lighter()
 
 
 class BlinkingValidator(QValidator):
@@ -127,7 +128,7 @@ class Colorer():
         if preserve is True and role == self.bgColorRole:
             self.savedBgColor = palette.color(role)
 
-    def blink(self, color: DisplayColor):
+    def blink(self, color: DisplayColor, *_):
         """ Blink with background with smooth fade-out. Does not change `.color()` output.
             `FADE_TIME` and `FADE_STAGES` global settings adjust quality and timing respectively
         """
@@ -193,7 +194,7 @@ class Colorer():
             return True
         else: return False
 
-    def setBaseColor(self, color: Union[DisplayColor, QColor, str, None]):
+    def setBaseColor(self, color: Union[DisplayColor, QColor, str, None], *_):
         """ If `color` is `None`, color is reset to stored background color (equivalent to `.resetBaseColor()`)"""
         if color is None: color = self.bgColor
         return self.setColor(self.bgColorRole, color)

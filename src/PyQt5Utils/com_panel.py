@@ -14,10 +14,11 @@ from PyQt5.QtGui import QIcon, QMovie, QColor
 from PyQt5.QtWidgets import QAction, QSizePolicy, QActionGroup
 from PyQt5.QtWidgets import QWidget, QApplication, QHBoxLayout, QComboBox, QPushButton, QLineEdit, QMenu, QLabel
 
+from .exhook import install_exhook
 from .colorer import Colorer, DisplayColor
+from .helpers import QWorkerThread, pushed, blockedSignals, preservedSelection
 from .extended_widgets import QRightclickButton, QSqButton, QSymbolLineEdit, QAutoSelectLineEdit, QHoldFocusComboBox
 from .extended_widgets import QIndicator
-from .helpers import QWorkerThread, pushed, blockedSignals, preservedSelection
 
 from Transceiver import SerialTransceiver, SerialError
 from Utils import Logger, formatList, ignoreErrors, AttrEnum, legacy
@@ -564,9 +565,7 @@ if __name__ == '__main__':
     if len(log.handlers) == 2 and type(log.handlers[0] is type(log.handlers[1])):
         del log.handlers[1]
 
-    def trap_exc_during_debug(*args):
-        raise RuntimeError(f'PyQt5 says "{args[1]}"')
-    sys.excepthook = trap_exc_during_debug
+    install_exhook()
 
     app = QApplication(sys.argv)
     app.setStyle('fusion')
