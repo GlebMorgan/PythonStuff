@@ -19,23 +19,36 @@ class QWorkerThread(QThread):
 
 class Block:
     """ BoxLayout helper contextmanager TODO: docstring """
-    def __init__(self, owner: Union[QLayout, QWidget], *, layout: Union[QLayout, str], spacing=None, margins=0):
+    def __init__(self, owner: Union[QLayout, QWidget], *, layout: Union[QLayout, str],
+                 spacing: int = None, margins: int = 0, attr: str = None):
+
         if isinstance(layout, str):
             if layout == 'v': layout = QVBoxLayout()
             if layout == 'h': layout = QHBoxLayout()
+        self.owner = owner
+        self.parent = owner if isinstance(owner, QWidget) else owner.parentWidget()
         self.layout = layout
+
+        if attr and attr.isidentifier():
+            setattr(self.parent, attr, self.layout)
+        elif attr is not None:
+            raise ValueError(f"Invalid attr name '{attr}'")
+
         self.layout.setContentsMargins(*(margins,)*4)
         if spacing: self.layout.setSpacing(spacing)
-        self.owner = owner
 
     def __enter__(self):
-        return self.layout
-
-    def __exit__(self, exc_type, exc_val, exc_tb):
         if isinstance(self.owner, QWidget):
             self.owner.setLayout(self.layout)
         elif isinstance(self.owner, QLayout):
             self.owner.addLayout(self.layout)
+        else:
+            raise TypeError(f"Invalid owner type '{self.owner.__class__.__name__}', "
+                            f"expected 'QWidget' or 'QLayout'")
+        return self.layout
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
 
 
 @contextmanager
