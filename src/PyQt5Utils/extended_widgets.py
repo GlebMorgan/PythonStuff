@@ -1,6 +1,6 @@
 from PyQt5.QtCore import Qt, pyqtSignal, QSize, QTimer
 from PyQt5.QtGui import QRegularExpressionValidator as QRegexValidator, QFontMetrics
-from PyQt5.QtWidgets import QApplication, QPushButton, QComboBox, QLineEdit, QSizePolicy, QRadioButton
+from PyQt5.QtWidgets import QApplication, QPushButton, QComboBox, QLineEdit, QSizePolicy, QRadioButton, QLabel
 from .colorer import Colorer
 
 
@@ -114,3 +114,9 @@ class QIndicator(QRadioButton):
     def mousePressEvent(self, *args, **kwargs):
         # CONSIDER: block built-in click event handlers rather than shut down the event entirely
         return
+
+
+class QFixLabel(QLabel):
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
