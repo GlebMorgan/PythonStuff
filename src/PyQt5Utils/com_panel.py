@@ -18,7 +18,7 @@ from .exhook import install_exhook
 from .colorer import Colorer, DisplayColor
 from .helpers import QWorkerThread, pushed, blockedSignals, preservedSelection
 from .extended_widgets import QRightclickButton, QSqButton, QSymbolLineEdit, QAutoSelectLineEdit, QHoldFocusComboBox
-from .extended_widgets import QIndicator
+from .extended_widgets import QIndicator, QFixLabel
 
 from Transceiver import SerialTransceiver, SerialError
 from Utils import Logger, formatList, ignoreErrors, AttrEnum, legacy
@@ -44,6 +44,9 @@ from Utils import Logger, formatList, ignoreErrors, AttrEnum, legacy
 # Default ContentsMargins = 12
 
 log = Logger("CommPanel")
+
+# True ––► test button and test methods are added
+DEBUG_MODE = False
 
 REFRESH_GIF = resource_filename(__name__, 'res/refresh.gif')
 
@@ -106,7 +109,7 @@ class SerialCommPanel(QWidget):
     comPortsRefreshed = pyqtSignal(tuple)  # (new com ports list)
     commModeChanged = pyqtSignal(CommMode)  # (new mode)
     serialConfigChanged = pyqtSignal(str, str)  # (setting name, new value)
-    bindingChanged = pyqtSignal(CommMode)
+    bindingAdded = pyqtSignal(CommMode)  # (added binding mode)
 
     Mode = CommMode  # to access CommMode available outside (for ex., in .bind())
 
@@ -125,7 +128,7 @@ class SerialCommPanel(QWidget):
         self.commBindings = dict.fromkeys(CommMode.__members__.keys())
 
         # Widgets
-        self.indicator = QIndicator(self)
+        self.indicator = QIndicator(self, duration=150)
         self.commButton = self.newCommButton()
         self.commModeButton = self.newCommModeButton()
         self.commModeMenu = self.newCommModeMenu()
@@ -135,7 +138,7 @@ class SerialCommPanel(QWidget):
         self.bytesizeEdit = self.newDataFrameEdit(name='bytesize', chars=SerialTransceiver.BYTESIZES)
         self.parityEdit = self.newDataFrameEdit(name='parity', chars=SerialTransceiver.PARITIES)
         self.stopbitsEdit = self.newDataFrameEdit(name='stopbits', chars=(1, 2))
-        self.testButton = self.newTestButton()  # TEMP
+        if DEBUG_MODE: self.testButton = self.newTestButton()
 
         self.setup(devInt)
 
@@ -160,24 +163,25 @@ class SerialCommPanel(QWidget):
         layout.addWidget(self.commButton)
         layout.addWidget(self.commModeButton)
         layout.addSpacing(spacing)
-        layout.addWidget(self.newLabel("COM"))
+        layout.addWidget(QFixLabel("COM", self))
         layout.addSpacing(smallSpacing)
         layout.addWidget(self.comCombobox)
         layout.addWidget(self.refreshPortsButton)
         layout.addSpacing(spacing)
-        layout.addWidget(self.newLabel("BAUD"))
+        layout.addWidget(QFixLabel("BAUD", self))
         layout.addSpacing(smallSpacing)
         layout.addWidget(self.baudCombobox)
         layout.addSpacing(spacing)
-        layout.addWidget(self.newLabel("FRAME"))
+        layout.addWidget(QFixLabel("FRAME", self))
         layout.addSpacing(smallSpacing)
         layout.addWidget(self.bytesizeEdit)
-        layout.addWidget(self.newLabel("–"))
+        layout.addWidget(QFixLabel("–", self))
         layout.addWidget(self.parityEdit)
-        layout.addWidget(self.newLabel("–"))
+        layout.addWidget(QFixLabel("–", self))
         layout.addWidget(self.stopbitsEdit)
-        layout.addSpacing(spacing)  # TEMP
-        layout.addWidget(self.testButton)  # TEMP
+        if DEBUG_MODE:
+            layout.addSpacing(spacing)
+            layout.addWidget(self.testButton)
 
         self.setLayout(layout)
 
@@ -202,9 +206,9 @@ class SerialCommPanel(QWidget):
                                   widget=this, shortcut=QKeySequence("Ctrl+T"),
                                   slot=lambda: getattr(self, self.commMode.handler)())
         this.clicked.connect(action.trigger)
-        # TODO: add action 'communicate' and add key shortcut 'Enter' to it
 
-        this.setMode = setMode.__get__(this, this.__class__)  # bind method to commButton
+        # ▼ Bind methods to commButton
+        this.setMode = setMode.__get__(this, this.__class__)
         this.setState = setState.__get__(this, this.__class__)
 
         this.rclicked.connect(partial(self.dropStartButtonMenuBelow, this))
@@ -304,18 +308,12 @@ class SerialCommPanel(QWidget):
         this.setToolTip(name.capitalize())
         return this
 
-    def newLabel(self, text):
-        this = QLabel(text, self)
-        this.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
-        return this
-
     def newTestButton(self):
         this = QRightclickButton('Test', self)
         this.clicked.connect(lambda: print("click on button!"))
         this.lclicked.connect(self.testSlotL)
         this.rclicked.connect(self.testSlotR)
         this.mclicked.connect(self.testSlotM)
-        # this.setProperty('testField', True)
         this.colorer = Colorer(this)
         this.setToolTip("Test")
         return this
@@ -325,8 +323,10 @@ class SerialCommPanel(QWidget):
 
     def setInterface(self, interface):
         self.serialInt = interface
-        if interface is not None and interface.port is not None:
-            self.comCombobox.setText(interface.port.lstrip('COM'))
+        if interface is not None:
+            self.updateSerialConfig()
+            if interface.port is not None:
+                self.comCombobox.setText(interface.port.lstrip('COM'))
 
     def changeCommMode(self, action: Union[QAction, CommMode]):
         if isinstance(action, CommMode): mode = action
@@ -357,7 +357,7 @@ class SerialCommPanel(QWidget):
 
     @staticmethod
     def getComPortsList():
-        log.debug(f"Test thread ID: {int(QThread.currentThreadId())}")  # TESTME: will this print worker thread id?
+        log.debug(f"Update thread ID: {int(QThread.currentThreadId())}")
         log.debug("Fetching com ports...")
         newComPorts: List[ComPortInfo] = comports()
         log.debug(f"New com ports list: {', '.join(port.device for port in newComPorts)} ({len(newComPorts)} items)")
@@ -463,7 +463,7 @@ class SerialCommPanel(QWidget):
             self.commButton.setDisabled(False)
             log.debug(f"Default communication mode changed to {mode.name}")
         self.commModeButton.colorer.blink(DisplayColor.Blue)
-        self.bindingChanged.emit(mode)
+        self.bindingAdded.emit(mode)
         log.info(f"Communication binding added: {function.__name__}() <{mode.name}>")
 
     def triggerCommunication(self):
@@ -491,70 +491,43 @@ class SerialCommPanel(QWidget):
             elif status is False: button.colorer.blink(DisplayColor.Red)
             else: return
 
-    @legacy
-    def communicate(self):
-        assert self.activeCommBinding is not None  # TEMP
-        button = self.commButton
-        button.setDisabled(True)
-        QTimer.singleShot(0, partial(button.setDisabled, False))
-        button.colorer.resetBaseColor()
+    if DEBUG_MODE:
 
-        connStatus = self.activeCommBinding()
-        if connStatus is True:
-            if button.isCheckable():
-                if button.isChecked():
-                    button.colorer.setBaseColor(DisplayColor.LightGreen)
-                else:
-                    button.colorer.resetBaseColor()
-            else: button.colorer.blink(DisplayColor.Green)
-        elif connStatus is False:
-            if button.isCheckable():
-                if button.isChecked():
-                    button.colorer.setBaseColor(DisplayColor.Red)
-                else:
-                    button.colorer.resetBaseColor()
-            else: button.colorer.blink(DisplayColor.Red)
-        elif connStatus is None:
-            print("AZAZAAAAAAAAAAAAAAAAAAAAAA")  # TEMP
-        elif connStatus is not None:
-            raise TypeError(f"Communication binding .{self.activeCommBinding.__name__}() "
-                            f"for '{self.commMode.name}' mode returned invalid status: {connStatus}")
-
-    def testCommBinding(self, state):
-        from random import randint
-        if state is False and randint(0,2) == 0:
-            log.debug("<Imitating com port opening failure>")
-            return False
-        try:
-            if state is True:
-                self.serialInt.close()
-                log.debug(f"TEST: {self.serialInt.port} ▼")
+        def testCommBinding(self, state):
+            from random import randint
+            if state is False and randint(0,2) == 0:
+                log.debug("<Imitating com port opening failure>")
                 return False
+            try:
+                if state is True:
+                    self.serialInt.close()
+                    log.debug(f"TEST: {self.serialInt.port} ▼")
+                    return False
+                else:
+                    self.serialInt.open()
+                    log.debug(f"TEST: {self.serialInt.port} ▲")
+                    return True
+            except SerialError as e:
+                log.error(e)
+                return state
+
+        def testSlotL(self, par=..., *args):
+            if par is not ...: print(f"Par: {par}")
+            print(f"Serial int: {self.serialInt}")
+            print(f"Communication mode: {self.commMode.name}")
+            self.bytesizeEdit.colorer.setBaseColor(QColor(255,127,127))
+            self.parityEdit.colorer.setBaseColor(QColor(127,255,127))
+            self.stopbitsEdit.colorer.setBaseColor(QColor(127,127,255))
+            QTimer.singleShot(20, partial(self.testButton.colorer.blink, DisplayColor.Green))
+
+        def testSlotR(self):
+            if self.testButton.colorer.color() == DisplayColor.LightRed.value:
+                self.testButton.colorer.resetBaseColor()
             else:
-                self.serialInt.open()
-                log.debug(f"TEST: {self.serialInt.port} ▲")
-                return True
-        except SerialError as e:
-            log.error(e)
-            return state
+                self.testButton.colorer.setBaseColor(DisplayColor.LightRed)
 
-    def testSlotL(self, par=..., *args):
-        if par is not ...: print(f"Par: {par}")
-        print(f"Serial int: {self.serialInt}")
-        print(f"Communication mode: {self.commMode.name}")
-        self.bytesizeEdit.colorer.setBaseColor(QColor(255,127,127))
-        self.parityEdit.colorer.setBaseColor(QColor(127,255,127))
-        self.stopbitsEdit.colorer.setBaseColor(QColor(127,127,255))
-        QTimer.singleShot(20, partial(self.testButton.colorer.blink, DisplayColor.Green))
-
-    def testSlotR(self):
-        if self.testButton.colorer.color() == DisplayColor.LightRed.value:
-            self.testButton.colorer.resetBaseColor()
-        else:
-            self.testButton.colorer.setBaseColor(DisplayColor.LightRed)
-
-    def testSlotM(self):
-        print(self.commButton.isChecked())
+        def testSlotM(self):
+            print(self.commButton.isChecked())
 
 
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
