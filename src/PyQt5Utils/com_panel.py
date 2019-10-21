@@ -18,7 +18,7 @@ from .exhook import install_exhook
 from .colorer import Colorer, DisplayColor
 from .helpers import QWorkerThread, pushed, blockedSignals, preservedSelection
 from .extended_widgets import QRightclickButton, QSqButton, QSymbolLineEdit, QAutoSelectLineEdit, QHoldFocusComboBox
-from .extended_widgets import QIndicator, QFixLabel
+from .extended_widgets import QIndicator, QFixedLabel
 
 from Transceiver import SerialTransceiver, SerialError
 from Utils import Logger, formatList, ignoreErrors, AttrEnum, legacy
@@ -163,21 +163,21 @@ class SerialCommPanel(QWidget):
         layout.addWidget(self.commButton)
         layout.addWidget(self.commModeButton)
         layout.addSpacing(spacing)
-        layout.addWidget(QFixLabel("COM", self))
+        layout.addWidget(QFixedLabel("COM", self))
         layout.addSpacing(smallSpacing)
         layout.addWidget(self.comCombobox)
         layout.addWidget(self.refreshPortsButton)
         layout.addSpacing(spacing)
-        layout.addWidget(QFixLabel("BAUD", self))
+        layout.addWidget(QFixedLabel("BAUD", self))
         layout.addSpacing(smallSpacing)
         layout.addWidget(self.baudCombobox)
         layout.addSpacing(spacing)
-        layout.addWidget(QFixLabel("FRAME", self))
+        layout.addWidget(QFixedLabel("FRAME", self))
         layout.addSpacing(smallSpacing)
         layout.addWidget(self.bytesizeEdit)
-        layout.addWidget(QFixLabel("–", self))
+        layout.addWidget(QFixedLabel("–", self))
         layout.addWidget(self.parityEdit)
-        layout.addWidget(QFixLabel("–", self))
+        layout.addWidget(QFixedLabel("–", self))
         layout.addWidget(self.stopbitsEdit)
         if DEBUG_MODE:
             layout.addSpacing(spacing)

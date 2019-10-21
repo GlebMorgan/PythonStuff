@@ -116,7 +116,7 @@ class QIndicator(QRadioButton):
         return
 
 
-class QFixLabel(QLabel):
+class QFixedLabel(QLabel):
     def __init__(self, *args):
         super().__init__(*args)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
