@@ -394,19 +394,26 @@ class SerialCommPanel(QWidget):
                 with blockedSignals(combobox):
                     combobox.clear()
                     combobox.addItems(newPortNumbers)
+
                 for i, port in enumerate(ports):
                     combobox.setItemData(i, port.description, Qt.ToolTipRole)
-                # combobox.setCurrentIndex(combobox.findText(currentPort))
+
                 try: port = self.serialInt.port.strip('COM')
                 except AttributeError: port = ''
+
+                with blockedSignals(combobox):
+                    combobox.setCurrentIndex(combobox.findText(port))
                 combobox.setCurrentText(port)
-                combobox.contents = newPortNumbers
+
+            combobox.contents = newPortNumbers
             currentComPortsRegex = QRegex('|'.join(combobox.contents), options=QRegex.CaseInsensitiveOption)
             combobox.setValidator(QRegexValidator(currentComPortsRegex))
             combobox.colorer.patchValidator()
+
             if combobox.view().isVisible():
                 combobox.hidePopup()
                 combobox.showPopup()
+
             combobox.colorer.blink(DisplayColor.Blue)
             log.info(f"COM ports refreshed: {', '.join(f'COM{port}' for port in newPortNumbers)}")
         else:

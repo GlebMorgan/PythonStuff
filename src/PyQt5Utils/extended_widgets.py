@@ -76,8 +76,8 @@ class QHoldFocusComboBox(QComboBox):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        QTimer.singleShot(0, lambda: self.lineEdit().editingFinished.connect(
-                lambda: self.triggered.emit() if not self.view().hasFocus() else None))
+        # QTimer.singleShot(0, lambda: self.lineEdit().editingFinished.connect(
+        #         lambda: self.triggered.emit() if not self.view().hasFocus() else None))
         # ▼ Ducktape for mouse click item activation
         QTimer.singleShot(0, lambda: self.currentIndexChanged.connect(
                 lambda: self.triggered.emit() if not self.view().hasFocus() else None))
