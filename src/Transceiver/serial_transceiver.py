@@ -1,6 +1,7 @@
 import struct
 from contextlib import contextmanager
 from functools import wraps
+from typing import Tuple
 
 import serial
 from Utils import Logger, bytewise, legacy
@@ -72,7 +73,7 @@ class SerialTransceiver(serial.Serial):
     def readSimple(self, size=1) -> bytes:
         return super().read(size)
 
-    def handleSerialError(self, error: Exception):
+    def handleSerialError(self, error: Exception) -> Tuple[bool, str]:
         """ Returns tuple of 2 elements:
                 1) Boolean value denoting whether error needs further handling
                 2) More detailed SerialError description
@@ -89,7 +90,7 @@ class SerialTransceiver(serial.Serial):
             elif ('FileNotFoundError' in error.args[0]):
                 return (True, f"Cannot open port '{comPortName}' - "
                               f"interface does not exist in the system (device unplugged?)")
-        return (True, error)
+        return (True, error.args[0])
 
     @legacy  # found out it is already implemented in Serial parameters property setters
     @contextmanager
