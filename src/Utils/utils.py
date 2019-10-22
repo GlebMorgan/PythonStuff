@@ -676,6 +676,10 @@ class AttrEnum(Enum):
         for _parname, _par in zip_longest(self.__names__, args):
             setattr(self, _parname, _par)
 
+
+def capital(s:str):
+    return s[0].upper() + s[1:]
+
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 
 
