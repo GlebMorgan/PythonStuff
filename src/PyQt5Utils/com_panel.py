@@ -2,26 +2,26 @@ from __future__ import annotations as annotations_feature
 
 import sys
 from functools import partial
-from os.path import expandvars as envar, dirname
 from typing import Union, Callable, List, Optional
-from serial.tools.list_ports_common import ListPortInfo as ComPortInfo
-from serial.tools.list_ports_windows import comports
-from pkg_resources import resource_filename, cleanup_resources, set_extraction_path
 
-from PyQt5.QtCore import Qt, pyqtSignal, QSize, QObject, QThread, QTimer, QRegularExpression as QRegex
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, QThread, QTimer, QRegularExpression as QRegex
 from PyQt5.QtGui import QFontMetrics, QKeySequence, QRegularExpressionValidator as QRegexValidator
 from PyQt5.QtGui import QIcon, QMovie, QColor
 from PyQt5.QtWidgets import QAction, QSizePolicy, QActionGroup
-from PyQt5.QtWidgets import QWidget, QApplication, QHBoxLayout, QComboBox, QPushButton, QLineEdit, QMenu, QLabel
+from PyQt5.QtWidgets import QWidget, QApplication, QHBoxLayout, QComboBox, QMenu
 
-from .exhook import install_exhook
-from .colorer import Colorer, DisplayColor
-from .helpers import QWorkerThread, pushed, blockedSignals, preservedSelection
-from .extended_widgets import QRightclickButton, QSqButton, QSymbolLineEdit, QAutoSelectLineEdit, QHoldFocusComboBox
-from .extended_widgets import QIndicator, QFixedLabel
+from pkg_resources import resource_filename, cleanup_resources
+from serial.tools.list_ports_common import ListPortInfo as ComPortInfo
+from serial.tools.list_ports_windows import comports
 
 from Transceiver import SerialTransceiver, SerialError
-from Utils import Logger, formatList, ignoreErrors, AttrEnum, legacy
+from Utils import Logger, ignoreErrors, AttrEnum
+
+from .colorer import Colorer, DisplayColor
+from .exhook import install_exhook
+from .extended_widgets import QIndicator, QFixedLabel
+from .extended_widgets import QRightclickButton, QSqButton, QSymbolLineEdit, QAutoSelectLineEdit, QHoldFocusComboBox
+from .helpers import QWorkerThread, pushed, blockedSignals, preservedSelection
 
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 
@@ -99,8 +99,8 @@ class CommMode(AttrEnum):
     __names__ = 'label', 'description', 'handler'
 
     Continuous = 'Start', "Start/Stop communication loop", "triggerCommunication"
-    Manual = 'Send/Auto', "Packets are sent automatically + on button click", "triggerTransaction"
-    Smart = 'Send', "Send single packet", "triggerTransaction"
+    Manual = 'Send', "Send single packet", "triggerTransaction"
+    Smart = 'Send/Auto', "Packets are sent automatically + on button click", "triggerTransaction"
 
 
 class SerialCommPanel(QWidget):
@@ -443,7 +443,6 @@ class SerialCommPanel(QWidget):
         except SerialError as e:
             log.error(e)
             assert self.sender().widget.text() == str(value).lstrip('COM')
-            # setattr(interface, setting, None)  # BUG: does not work for baudrate, for ex.
             colorer.setBaseColor(DisplayColor.LightRed)
             return False
         else:
