@@ -7,9 +7,9 @@ from .color_handler import ColorHandler
 from .utils import bytewise
 
 
-# TODO: Add sub-loggers to enable/disable logging of specific parts of code
+# - ALREADY EXISTS - Add sub-loggers to enable/disable logging of specific parts of code
 
-# TODO: Coloring option based on logger instance, not logging level
+# ✗ Coloring option based on logger instance, not logging level
 
 
 C = CRITICAL = FATAL = logging.CRITICAL
@@ -23,7 +23,6 @@ N = NOTSET = logging.NOTSET
 class Logger:
 
     LOGGERS = {}
-
     LEVELS = logging._nameToLevel
     LEVELS_SHORT = {
         'C': 'CRITICAL',
