@@ -9,7 +9,7 @@ class _AnsiColorizer:
     """
     _colors = dict(black='30m', red='31m', green='32m', yellow='33m',
                    blue='34m', magenta='35m', cyan='36m', white='37m',
-                   brightblack = '30;1m', brightred='31;1m', brightgreen='32;1m', brightyellow='33;1m',
+                   brightblack='30;1m', brightred='31;1m', brightgreen='32;1m', brightyellow='33;1m',
                    brightblue='34;1m', brightmagenta='35;1m', brightcyan='36;1m', brightwhite='37;1m')
 
     def __init__(self, stream):

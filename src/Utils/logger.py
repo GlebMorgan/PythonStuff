@@ -3,7 +3,7 @@ import sys
 import traceback
 from os import linesep
 
-from .colored_logger import ColorHandler
+from .color_handler import ColorHandler
 from .utils import bytewise
 
 
