@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='PyUtils',
-    version='1.1.4.dev1',
+    version='1.2.0.dev0',
     package_dir={'': 'src'},
     packages=['Utils', 'PyQt5Utils', 'Transceiver'],
     url='https://github.com/GlebMorgan/PythonStuff',
@@ -10,5 +10,6 @@ setup(
     author='GlebMorgan',
     author_email='glebmorgan@gmail.com',
     description='Utilities to use cross-project',
-    install_requires=['PyQt5', 'stdlib_list', 'orderedset', 'pySerial']
+    install_requires=['PyQt5', 'stdlib_list', 'orderedset', 'pySerial',
+                      'colorama', 'coloredlogs', 'verboselogs']
 )
