@@ -11,6 +11,14 @@ from verboselogs import VerboseLogger
 from .utils import classproperty
 
 
+# TODO: API migrating procedures:
+#           - set loggers levels in all <logname> = Logger("Name") assignments
+#           - search for all Logger.<attr> through 'Ctrl+Shift+F' and replace with new API attrs
+#           - search for all Logger methods used (like .showError) and replace
+
+# TODO: add support for custom formatters (or choices from ones defined by this module) in Logger()
+
+
 colorama.init() if sys.stdout.isatty() else colorama.deinit()
 
 
@@ -130,15 +138,15 @@ class ColoredLogger(VerboseLogger):
         """ Returns current logging level as string """
         return logging.getLevelName(self.level)
 
-    def log(self, level, msg, *args, traceback=None, **kwargs):
+    def _log(self, level, msg, *args, traceback=None, **kwargs):
         """ Override. Formats errors in 'ErrorClass: message' format
                 'traceback' kwarg is an alias for 'exc_info'
         """
         if isinstance(msg, Exception):
-            msg = f'{msg.__class__}: {msg}'
+            msg = f'{msg.__class__.__name__}: {msg}'
         if traceback is True:
             kwargs['exc_info'] = True
-        return super().log(level, msg, *args, **kwargs)
+        return super()._log(level, msg, *args, **kwargs)
 
     @classmethod
     def disable(cls, option: str = None):
@@ -147,7 +155,6 @@ class ColoredLogger(VerboseLogger):
             If no option provided, returns a context manager
                 that disables all existing to-the-moment loggers inside its context
         """
-
         if option is None:
             return cls._disableCM_()
         elif option == 'all':
@@ -174,11 +181,11 @@ class ColoredLogger(VerboseLogger):
             logger.disabled = False
 
 
-def Logger(name: str = 'root', console: bool = True, file: str = None, qt: Callable = None):
+def Logger(name: str = 'Root', console: bool = True, file: str = None, qt: Callable = None):
     """ Factory generating loggers with pre-assigned handlers and formatters
 
-        name - Logger name. If not provided, root logger is used, whose record format
-                   is just colored message with no format fields set (simpleColorFormatter is used)
+        name - Logger name. If not provided, is set to 'Root' + record format is just
+                   colored message with no format fields set (simpleColorFormatter is used)
         Handlers:
             console - boolean enabling StreamHandler with colored output (colorFormatter is used)
             file    - path providing log file path for FileHandler (basicFormatter is used)
@@ -190,7 +197,7 @@ def Logger(name: str = 'root', console: bool = True, file: str = None, qt: Calla
 
     if console:
         consoleHandler = logging.StreamHandler()
-        if name != 'root':
+        if name != 'Root':
             consoleHandler.setFormatter(colorFormatter)
         else:
             consoleHandler.setFormatter(simpleColorFormatter)
@@ -210,6 +217,12 @@ def Logger(name: str = 'root', console: bool = True, file: str = None, qt: Calla
     return this
 
 
+# Assign properties that do not refer to
+# particular logger objects on Logger function itself
+# in order not to import unbound names from this module
+Logger.all = logging.getLogger().manager.loggerDict
+
+
 if __name__ == '__main__':
     log = Logger('Test')
     log.error("Azaza")
@@ -223,6 +236,8 @@ if __name__ == '__main__':
     logRoot.success('Message')
     logRoot.spam('Spam')
     logRoot.notice('Important')
+
+    print(Logger.all)
 
     if "PYCHARM_HOSTED" not in os.environ:
         input('Type to exit...')
