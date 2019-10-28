@@ -11,6 +11,7 @@ from Utils import Logger
 
 
 log = Logger("Colorer")
+log.setLevel('DEBUG')
 
 
 FADE_TIME_HALO = 120  # ms

@@ -9,6 +9,7 @@ from .WidgetColorer import Colorer
 from .ExtendedWidgetsBase import ActionWidget, ColoredWidget
 
 log = Logger("ActionWidget")
+log.setLevel('DEBUG')
 
 
 class ActionButton(QPushButton, ActionWidget):
@@ -137,7 +138,6 @@ class ActionLineEdit(QLineEdit, ActionWidget):
 
 
 if __name__ == '__main__':
-    log = Logger("ExtendedWidgets test")
 
     from PyQt5.QtWidgets import QWidget, QHBoxLayout, QApplication, QLabel, QAction
     from random import choice
@@ -161,7 +161,7 @@ if __name__ == '__main__':
         this = QAction(name, parent)
         if shortcut: this.setShortcut(shortcut)
         this.triggered.connect(slot)
-        log.debug(f"Action {name} created: {this}")
+        print(f"Action {name} created: {this}")
         return this
 
     app = QApplication([])

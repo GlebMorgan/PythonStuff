@@ -7,6 +7,7 @@ from Utils import memoLastPosArgs, threaded, Dummy, Logger, Context
 
 
 log = Logger("ComPanel")
+log.setLevel('DEBUG')
 
 
 class ComChooserValidator(QRegExpValidator, NotifyingValidator):

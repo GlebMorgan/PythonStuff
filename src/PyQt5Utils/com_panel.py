@@ -44,6 +44,7 @@ from .helpers import QWorkerThread, pushed, blockedSignals, preservedSelection
 # Default ContentsMargins = 12
 
 log = Logger("CommPanel")
+log.setLevel('DEBUG')
 
 # True ––► test button and test methods are added
 DEBUG_MODE = False

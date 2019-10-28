@@ -10,6 +10,7 @@ from orderedset import OrderedSet
 
 from Utils import attachItem, Logger, legacy, auto_repr, Null
 
+
 log = Logger('AttrTagging')
 log.setLevel('INFO')
 

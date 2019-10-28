@@ -13,6 +13,7 @@ from Utils import Logger, Dummy
 from .WidgetColorer import Colorer
 
 log = Logger("ExtendedWidgetsBase")
+log.setLevel('DEBUG')
 
 
 class ActionWidget(QWidget):

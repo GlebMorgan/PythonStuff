@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import QWidget
 from Utils import Logger
 
 log = Logger("Colorer")
+log.setLevel('DEBUG')
 
 
 class Colorer():

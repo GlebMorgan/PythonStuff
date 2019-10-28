@@ -9,7 +9,10 @@ from .checksums import rfc1071
 from .errors import *
 
 log = Logger("Serial")
+log.setLevel('DEBUG')
+
 slog = Logger("Packets")
+slog.setLevel('DEBUG')
 
 # CONSIDER: move all SerialCommunication-related errors to Transceiver class (interface)
 #           and import it into utilizing classes to allow interface definition and raising proper error types
