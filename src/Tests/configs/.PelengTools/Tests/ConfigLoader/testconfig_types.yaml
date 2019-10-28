@@ -1,0 +1,14 @@
+TYPES:
+  SIMPLE: 1
+  OK: ok
+  DICT_INT: {1: 1, 2: 2, 3: 3}
+  DICT_STR: {"1": 1, "2": 2, "3": 3}
+  NONE_CLASS_FILE: null
+  NONE_FILE: null
+  NONE_CLASS: 42
+  CAST_TYPE: 1
+  INCOMP_TYPE: COM1
+  lowercase: ignored
+  REF: 1
+  EXTRA: 0
+  BRACES: "str"

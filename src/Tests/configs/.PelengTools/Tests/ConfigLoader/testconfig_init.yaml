@@ -1,0 +1,24 @@
+APP:
+  P1: newP1
+  P2: bla bla
+  P3: newP2
+  P4:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+MAIN:
+  P1: pe odin
+  P2: 'param #2'
+  P3: 3
+  P4: unxep
+TEST:
+  P1: azaza
+  P2:
+  - a
+  - b
+  - c
+  - d
+  - e
+  P3: Par3

@@ -1,0 +1,8 @@
+print("in __main__.py")
+from run import test, test_comm
+
+if __name__ == '__main__':
+    test()
+    input('...')
+    test_comm()
+    input("...")

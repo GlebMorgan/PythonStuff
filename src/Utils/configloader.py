@@ -32,9 +32,9 @@ class ConfigLoader:
     # ▼ Immutable types must have .copy() attr
     SUPPORTED_TYPES = (int, float, str, bytes, bool, tuple, list, dict, set, type(None))
 
-    # ▼ Config is stored in APPDATA.PelengTools by default
+    # ▼ Config is stored in %APPDATA%/.PelengTools by default
     #   Should not be used as complete config file path; application subdirectory needs to be appended
-    CONFIG_FILE_BASE_PATH = joinpath(envar('%APPDATA%'), '.PelengTools')
+    BASE_PATH = joinpath(envar('%APPDATA%'), '.PelengTools')
 
     # ▼ Config file will be created automatically in case no one was found on specified path
     AUTO_CREATE_CONFIG_FILE = True
@@ -67,16 +67,20 @@ class ConfigLoader:
             raise NotImplementedError(f"{cls.__name__} is intended to be used by subclassing")
 
         if app is not None:
-            cls.path = joinpath(cls.CONFIG_FILE_BASE_PATH, app)
+            cls.path = joinpath(cls.BASE_PATH, app)
             if not isdir(cls.path):
-                dirs = sorted(listdir(cls.CONFIG_FILE_BASE_PATH))
+                dirs = sorted(listdir(cls.BASE_PATH))
                 raise ValueError(f"Config directory ['{app}'] not found. Existing directories: {dirs or 'None'}")
         elif cls.path is None:
             raise RuntimeError("Application config directory path is not specified. "
                                f"{cls.__mro__[-2].__name__}.path or {cls.__name__}.path should be provided")
 
         if not isdir(cls.path):
-            raise ValueError(f"Application config path is invalid directory: {cls.path}")
+            if cls.AUTO_CREATE_CONFIG_FILE is False:
+                log.debug(f"{cls.__name__} is configured not to create config file automatically")
+                return cls._useDefaultConfig_()
+            log.info(f"Performing initial save to {cls.path}")
+            cls.save(force=True)
 
         invalidAttrs = cls._checkInvalidTypes_()
         if invalidAttrs:
@@ -146,11 +150,12 @@ class ConfigLoader:
     @classmethod
     def save(cls, force: bool = None) -> bool:
         """ Save all config sections to config file if any have changed or if forced
-            NOTE: Call this method before app exit
             Return boolean denoting whether smth was actually saved to file
+            NOTE: Call this method before app exit
         """
 
-        # ▼ Skip save on False. Used when necessity of save is acquired dynamically (ex: CFG.save(CFG.update()))
+        # ▼ Skip save on False. Used when necessity of save
+        #   is acquired dynamically (ex: CFG.save(CFG.update()))
         if force is False: return False
 
         sections = tuple(configCls.__section__ for configCls in CONFIG_CLASSES)
@@ -158,15 +163,14 @@ class ConfigLoader:
         path = joinpath(cls.path, cls.filename)
         if not isfile(path):
             force = True
-            if cls.AUTO_CREATE_CONFIG_FILE is False:
-                log.debug("{cls.__name__} is configured not to create config file automatically")
-                return False
-            elif not isdir(cls.path):
-                try: makedirs(cls.path)
+            if not isdir(cls.path):
+                try:
+                    makedirs(cls.path, exist_ok=True)
                 except OSError as e:
                     log.error(f"Failed to create config directory tree:{linesep}{e}")
                     return False
-                else: log.debug(f"Created directory {cls.path}")
+                else:
+                    log.debug(f"Created directory {cls.path}")
 
         if not force:
             updatedConfigs = tuple(cfgCls for cfgCls in CONFIG_CLASSES if cfgCls.updated is True)
@@ -316,8 +320,9 @@ class ConfigLoader:
 
 if __name__ == '__main__':
     try:
-        from os import system
+        from os import system, environ
         system(r'cd ..\Tests && python -m pytest configloader_test.py -ra -vvv')
     except Exception as e:
         print(e)
-        input('...')
+        if "PYCHARM_HOSTED" not in environ:
+            input('Type to exit...')

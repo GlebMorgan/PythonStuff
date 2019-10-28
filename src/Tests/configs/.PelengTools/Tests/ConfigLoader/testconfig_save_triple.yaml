@@ -1,0 +1,14 @@
+TEST:
+  P1: strupd
+  P2:
+  - a
+  - b
+  - c
+  P3: 42
+TEST2:
+  I1: new
+  I2:
+  - 9
+  - 7
+  I3: true
+TEST3: {}

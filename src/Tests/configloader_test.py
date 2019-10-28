@@ -1,22 +1,24 @@
 from os import remove, rmdir
-from os.path import join as joinpath, isfile, isdir
+from os.path import join as joinpath, isfile, isdir, dirname
 from shutil import copyfile
 
 import pytest
 from Utils import formatList, configloader, ConfigLoader
 from ruamel.yaml import YAML
 
-PATH = r"C:\Users\Peleng-HP\AppData\Roaming\.PelengTools\Tests\ConfigLoader"
+PATH = dirname(__file__) + r"\configs\.PelengTools\Tests\ConfigLoader"
 
 savedState = {
-    'CONFIG_FILE_BASE_PATH': ConfigLoader.CONFIG_FILE_BASE_PATH,
+    'BASE_PATH': ConfigLoader.BASE_PATH,
     'AUTO_CREATE_CONFIG_FILE': ConfigLoader.AUTO_CREATE_CONFIG_FILE,
     'filename': ConfigLoader.filename,
     'path': ConfigLoader.path,
     'loader': ConfigLoader.loader,
 }
 
+
 def msg(e): return e.value.args[0]
+
 
 def reset(f):
     def reset_configloader_wrapper(*args, **kwargs):
@@ -55,12 +57,14 @@ def test_ConfigLoader_used_directly():
 
 @reset
 def test_path_not_dir():
-    class CONFIG(ConfigLoader, section='WillFail'): pass
+    class CONFIG(ConfigLoader, section='WillFail'):
+        A = 'a'
     CONFIG.path = PATH + r"\testconfig_init.yaml"
 
-    with pytest.raises(ValueError) as e:
-        CONFIG.load()
-    assert msg(e) == "Application config path is invalid directory: " + PATH + r"\testconfig_init.yaml"
+    CONFIG.load()
+
+    assert isfile(PATH + r"\testconfig_init.yaml")
+    assert CONFIG.A == 'a'
 
 
 @reset
@@ -496,15 +500,18 @@ def test_save_simple():
 @reset
 def test_app_name():
     class CONFIG(ConfigLoader, section='CONF'): pass
+    CONFIG.path = PATH
     CONFIG.filename = 'testconfig_simple.yaml'
+
     with pytest.raises(ValueError) as e:
         CONFIG.load('Wrong')
     assert msg(e).startswith("Config directory ['Wrong'] not found. Existing directories: ")
     print(msg(e))
 
+    CONFIG.BASE_PATH = dirname(dirname((PATH)))
     CONFIG.load('Tests\\ConfigLoader')
 
-    assert CONFIG.path == r"C:\Users\Peleng-HP\AppData\Roaming\.PelengTools\Tests\ConfigLoader"
+    assert CONFIG.path == PATH
 
 
 @reset
