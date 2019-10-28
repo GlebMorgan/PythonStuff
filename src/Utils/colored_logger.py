@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import List, Callable
 
 import colorama
@@ -10,16 +11,10 @@ from verboselogs import VerboseLogger
 
 from .utils import classproperty
 
+# ✓ Add support for custom formatters (or choices from ones defined by this module) in Logger()
 
-# TODO: API migrating procedures:
-#           - set loggers levels in all <logname> = Logger("Name") assignments
-#           - search for all Logger.<attr> through 'Ctrl+Shift+F' and replace with new API attrs
-#           - search for all Logger methods used (like .showError) and replace
-
-# TODO: add support for custom formatters (or choices from ones defined by this module) in Logger()
-
-
-colorama.init() if sys.stdout.isatty() else colorama.deinit()
+# ✓ Do not add one-and-the-same handler to logger instance in Logger()
+#           (to eliminate duplicate logging output when running module via -m)
 
 
 try:
@@ -46,47 +41,47 @@ class LogStyle:
     """
 
     pyCharmRecords = dict(
-        spam    ={'color': 90},
-        debug   ={'color': 'white'},
-        verbose ={'color': 98},
-        info    ={'color': 'blue'},
-        notice  ={'color': 'magenta'},
-        warning ={'color': 'yellow'},
-        success ={'color': 'green'},
-        error   ={'color': 'cyan'},
+            spam={'color': 90},
+           debug={'color': 'white'},
+         verbose={'color': 98},
+            info={'color': 'blue'},
+          notice={'color': 'magenta'},
+         warning={'color': 'yellow'},
+         success={'color': 'green'},
+           error={'color': 'cyan'},
         critical={'color': 'red'},
     )
 
     cmdRecords = dict(
-        spam    ={'color': 90},
-        debug   ={'color': 0},
-        verbose ={'color': 97},
-        info    ={'color': 'blue', 'bold': True},
-        notice  ={'color': 'cyan', 'bold': True},
-        warning ={'color': 'yellow', 'bold': True},
-        success ={'color': 'green', 'bold': True},
-        error   ={'color': 'red', 'bold': True},
+            spam ={'color': 90},
+           debug={'color': 0},
+         verbose={'color': 97},
+            info={'color': 'blue', 'bold': True},
+          notice={'color': 'cyan', 'bold': True},
+         warning={'color': 'yellow', 'bold': True},
+         success={'color': 'green', 'bold': True},
+           error={'color': 'red', 'bold': True},
         critical={'color': 'red', 'bold': True},
     )
 
     qtRecords = dict(
-        spam    ={'color': 246},
-        debug   ={'color': 240},
-        verbose ={'color': 234},
-        info    ={'color': 39},
-        notice  ={'color': 21},
-        warning ={'color': 214},
-        success ={'color': 34},
-        error   ={'color': 202},
+            spam={'color': 246},
+           debug={'color': 240},
+         verbose={'color': 234},
+            info={'color': 39},
+          notice={'color': 21},
+         warning={'color': 214},
+         success={'color': 34},
+           error={'color': 202},
         critical={'color': 196},
     )
 
     fields = dict(
-        asctime    ={'color': 'white'},
-        module     ={'color': 'white'},
-        function   ={'color': 'white'},
-        levelname  ={'color': 'white'},
-        name       ={'color': 'white'},
+         asctime={'color': 'white'},
+          module={'color': 'white'},
+        function={'color': 'white'},
+       levelname={'color': 'white'},
+            name={'color': 'white'},
     )
 
     _isRunningInsidePyCharm_ = "PYCHARM_HOSTED" in os.environ
@@ -94,22 +89,30 @@ class LogStyle:
 
 
 LogRecordFormat = '[{asctime}.{msecs:03.0f} {module}:{funcName} {name}] {message}'
+DateLogRecordFormat = '[{asctime}.{msecs:03.0f}] {message}'
+SimpleLogRecordFormat = '{message}'
 LogDateFormat = '%H:%M:%S'
 
-basicFormatter = logging.Formatter(
-        fmt=LogRecordFormat, datefmt=LogDateFormat, style='{')
 
-colorFormatter = ColoredFormatter(
-        fmt=LogRecordFormat, datefmt=LogDateFormat, style='{',
-        level_styles=LogStyle.records, field_styles=LogStyle.fields)
+class Formatters(SimpleNamespace):
+    basic = logging.Formatter(
+            fmt=LogRecordFormat, datefmt=LogDateFormat, style='{')
 
-simpleColorFormatter = ColoredFormatter(
-        fmt='{message}', style='{',
-        level_styles=LogStyle.records, field_styles=LogStyle.fields)
+    colored = ColoredFormatter(
+            fmt=LogRecordFormat, datefmt=LogDateFormat, style='{',
+            level_styles=LogStyle.records, field_styles=LogStyle.fields)
 
-htmlColorFormatter = ColoredFormatter(
-        fmt=LogRecordFormat, datefmt=LogDateFormat, style='{',
-        level_styles=LogStyle.qtRecords, field_styles=LogStyle.fields)
+    simpleColored = ColoredFormatter(
+            fmt=SimpleLogRecordFormat, style='{',
+            level_styles=LogStyle.records, field_styles=LogStyle.fields)
+
+    qtColored = ColoredFormatter(
+            fmt=LogRecordFormat, datefmt=LogDateFormat, style='{',
+            level_styles=LogStyle.qtRecords, field_styles=LogStyle.fields)
+
+    simpleQtColored = ColoredFormatter(
+            fmt=DateLogRecordFormat, datefmt=LogDateFormat, style='{',
+            level_styles=LogStyle.qtRecords, field_styles=LogStyle.fields)
 
 
 class ColoredLogger(VerboseLogger):
@@ -128,6 +131,10 @@ class ColoredLogger(VerboseLogger):
     """ Mapping {logger level name: respective level value} """
     levels = logging._nameToLevel
 
+    consoleHandler: logging.StreamHandler
+    fileHandler: logging.FileHandler
+    qtHandler: QtHandler
+
     @classproperty
     def all(cls):
         """ Dict with all currently existing loggers (maps name to logger) """
@@ -138,9 +145,18 @@ class ColoredLogger(VerboseLogger):
         """ Returns current logging level as string """
         return logging.getLevelName(self.level)
 
+    def setFormatting(self, **handlers: logging.Handler):
+        """ Set custom logger formatters from given '<handler>=<formatter>' kwargs """
+        for name, formatter in handlers.items():
+            try:
+                handler = getattr(self, f'{name}Handler')
+            except AttributeError:
+                raise ValueError(f"Logger {self.name} does not have {name} handler")
+            handler.setFormatter(formatter)
+
     def _log(self, level, msg, *args, traceback=None, **kwargs):
-        """ Override. Formats errors in 'ErrorClass: message' format
-                'traceback' kwarg is an alias for 'exc_info'
+        """ Override. Formats errors in 'ErrorClass: message' format.
+            'traceback' kwarg is an alias for 'exc_info'
         """
         if isinstance(msg, Exception):
             msg = f'{msg.__class__.__name__}: {msg}'
@@ -192,28 +208,34 @@ def Logger(name: str = 'Root', console: bool = True, file: str = None, qt: Calla
             qt      - PyQt callback to trigger when LogRecord is emitted (htmlColorFormatter is used)
     """
 
-    logging.setLoggerClass(ColoredLogger)
-    this = logging.getLogger(name)
+    # ▼ Prevent duplicate initializing when Logger() is called with the same name
+    if name in Logger.all:
+        return logging.getLogger(name)
+    else:
+        this = logging.getLogger(name)
 
     if console:
-        consoleHandler = logging.StreamHandler()
+        this.consoleHandler = logging.StreamHandler()
         if name != 'Root':
-            consoleHandler.setFormatter(colorFormatter)
+            this.consoleHandler.setFormatter(Formatters.colored)
         else:
-            consoleHandler.setFormatter(simpleColorFormatter)
-        this.addHandler(consoleHandler)
+            this.consoleHandler.setFormatter(Formatters.simpleColored)
+        this.addHandler(this.consoleHandler)
+
     if file:
-        fileHandler = logging.FileHandler(file)
+        this.fileHandler = logging.FileHandler(file)
         if name != 'root':
-            fileHandler.setFormatter(basicFormatter)
-        this.addHandler(fileHandler)
+            this.fileHandler.setFormatter(Formatters.basic)
+        this.addHandler(this.fileHandler)
+
     if qt:
         try:
-            qtHandler = QtHandler(qt)
+            this.qtHandler = QtHandler(qt)
         except NameError:
             raise TypeError("QT handler is not available as PyQt5 module has not been found")
-        qtHandler.setFormatter(htmlColorFormatter)
-        this.addHandler(qtHandler)
+        this.qtHandler.setFormatter(Formatters.simpleQtColored)
+        this.addHandler(this.qtHandler)
+
     return this
 
 
@@ -221,6 +243,10 @@ def Logger(name: str = 'Root', console: bool = True, file: str = None, qt: Calla
 # particular logger objects on Logger function itself
 # in order not to import unbound names from this module
 Logger.all = logging.getLogger().manager.loggerDict
+
+
+logging.setLoggerClass(ColoredLogger)
+colorama.init() if sys.stdout.isatty() else colorama.deinit()
 
 
 if __name__ == '__main__':
@@ -237,7 +263,8 @@ if __name__ == '__main__':
     logRoot.spam('Spam')
     logRoot.notice('Important')
 
-    print(Logger.all)
+    from .utils import formatDict
+    print(f"Logger.all: {formatDict(Logger.all)}")
 
     if "PYCHARM_HOSTED" not in os.environ:
         input('Type to exit...')
