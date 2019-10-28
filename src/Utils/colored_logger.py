@@ -11,11 +11,14 @@ from verboselogs import VerboseLogger
 
 from .utils import classproperty
 
+
 # ✓ Add support for custom formatters (or choices from ones defined by this module) in Logger()
 
 # ✓ Do not add one-and-the-same handler to logger instance in Logger()
 #           (to eliminate duplicate logging output when running module via -m)
 
+
+ROOT = 'Root'
 
 try:
     from PyQt5.QtCore import QObject, pyqtSignal
@@ -154,6 +157,32 @@ class ColoredLogger(VerboseLogger):
                 raise ValueError(f"Logger {self.name} does not have {name} handler")
             handler.setFormatter(formatter)
 
+    def setConsoleHandler(self, formatter=Formatters.colored):
+        """ Add StreamHandler with given formatter set (default - verbose colored)
+        """
+        self.consoleHandler = logging.StreamHandler()
+        if self.name == ROOT:
+            self.consoleHandler.setFormatter(Formatters.simpleColored)
+        else:
+            self.consoleHandler.setFormatter(formatter)
+        self.addHandler(self.consoleHandler)
+
+    def setFileHandler(self, path: str, formatter=Formatters.basic):
+        """ Add FileHandler with given formatter set (default - verbose w/o coloring)
+        """
+        self.fileHandler = logging.FileHandler(path)
+        if self.name != ROOT:
+            self.fileHandler.setFormatter(formatter)
+        self.addHandler(self.fileHandler)
+
+    def setQtHandler(self, slot: Callable, formatter=Formatters.simpleQtColored):
+        try:
+            self.qtHandler = QtHandler(slot)
+        except NameError:
+            raise TypeError("QT handler is not available as PyQt5 module has not been found")
+        self.qtHandler.setFormatter(formatter)
+        self.addHandler(self.qtHandler)
+
     def _log(self, level, msg, *args, traceback=None, **kwargs):
         """ Override. Formats errors in 'ErrorClass: message' format.
             'traceback' kwarg is an alias for 'exc_info'
@@ -197,10 +226,10 @@ class ColoredLogger(VerboseLogger):
             logger.disabled = False
 
 
-def Logger(name: str = 'Root', console: bool = True, file: str = None, qt: Callable = None):
+def Logger(name: str = ROOT, console: bool = True, file: str = None, qt: Callable = None):
     """ Factory generating loggers with pre-assigned handlers and formatters
 
-        name - Logger name. If not provided, is set to 'Root' + record format is just
+        name - Logger name. If not provided, is set to ROOT + record format is just
                    colored message with no format fields set (simpleColorFormatter is used)
         Handlers:
             console - boolean enabling StreamHandler with colored output (colorFormatter is used)
@@ -212,29 +241,11 @@ def Logger(name: str = 'Root', console: bool = True, file: str = None, qt: Calla
     if name in Logger.all:
         return logging.getLogger(name)
     else:
-        this = logging.getLogger(name)
+        this: ColoredLogger = logging.getLogger(name)
 
-    if console:
-        this.consoleHandler = logging.StreamHandler()
-        if name != 'Root':
-            this.consoleHandler.setFormatter(Formatters.colored)
-        else:
-            this.consoleHandler.setFormatter(Formatters.simpleColored)
-        this.addHandler(this.consoleHandler)
-
-    if file:
-        this.fileHandler = logging.FileHandler(file)
-        if name != 'root':
-            this.fileHandler.setFormatter(Formatters.basic)
-        this.addHandler(this.fileHandler)
-
-    if qt:
-        try:
-            this.qtHandler = QtHandler(qt)
-        except NameError:
-            raise TypeError("QT handler is not available as PyQt5 module has not been found")
-        this.qtHandler.setFormatter(Formatters.simpleQtColored)
-        this.addHandler(this.qtHandler)
+    if console: this.setConsoleHandler()
+    if file: this.setFileHandler(file)
+    if qt: this.setQtHandler(qt)
 
     return this
 
