@@ -3,7 +3,7 @@ from enum import Enum
 from functools import wraps
 from itertools import chain as itertools_chain, zip_longest
 from os import linesep
-from typing import Union, Iterable
+from typing import Union, Iterable, Type, Mapping
 from time import time
 
 import stdlib_list
@@ -389,7 +389,7 @@ def trimDict(dct: dict, limit: int):
     return dict(list(dct.items())[:limit])
 
 
-def formatDict(d: dict, indent=4, level=0, limit=None):
+def formatDict(d: Mapping, indent=4, level=0, limit=None):
     """ Return string representation of mapping in a following format:
         {
             <name1>: str(<value1>)
@@ -615,9 +615,14 @@ def ask(msg, options=None):
 
 
 @contextmanager
-def ignoreErrors():
-    try: yield
-    except Exception: pass
+def ignoreErrors(*errorTypes: Type[Exception]):
+    if errorTypes == ():
+        errorTypes = Exception
+    try:
+        yield
+    except Exception as e:
+        if isinstance(e, errorTypes): pass
+        else: raise
 
 
 class Chain:
@@ -679,6 +684,14 @@ class AttrEnum(Enum):
 
 def capital(s:str):
     return s[0].upper() + s[1:]
+
+
+def isDunder(name: str) -> bool:
+    """ Return whether `name` is a __dunder__ name (from enum module) """
+    return (name[:2] == name[-2:] == '__' and
+            name[2:3] != '_' and
+            name[-3:-2] != '_' and
+            len(name) > 4)
 
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 
