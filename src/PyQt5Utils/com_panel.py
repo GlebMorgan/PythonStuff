@@ -542,8 +542,26 @@ class SerialCommPanel(QWidget):
 
 if __name__ == '__main__':
 
-    if len(log.handlers) == 2 and type(log.handlers[0] is type(log.handlers[1])):
-        del log.handlers[1]
+    # if len(log.handlers) == 2 and type(log.handlers[0] is type(log.handlers[1])):
+    #     del log.handlers[1]
+
+    def testCommBinding(state):
+        from random import randint
+        if state is False and randint(0, 2) == 0:
+            log.debug("<Imitating com port opening failure>")
+            return False
+        try:
+            if state is True:
+                cp.serialInt.close()
+                log.debug(f"TEST: {cp.serialInt.port} ▼")
+                return False
+            else:
+                cp.serialInt.open()
+                log.debug(f"TEST: {cp.serialInt.port} ▲")
+                return True
+        except SerialError as e:
+            log.error(e)
+            return state
 
     install_exhook()
 
@@ -560,7 +578,7 @@ if __name__ == '__main__':
     cp = SerialCommPanel(p, tr)
     cp.resize(100, 20)
     cp.move(300, 300)
-    cp.bind(CommMode.Continuous, cp.testCommBinding)
+    cp.bind(CommMode.Continuous, testCommBinding)
 
     l = QHBoxLayout()
     # l.addWidget(QPushButton("Test", p))
