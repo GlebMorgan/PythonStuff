@@ -20,13 +20,14 @@ class QWorkerThread(QThread):
 class Block:
     """ BoxLayout helper contextmanager TODO: docstring """
     def __init__(self, owner: Union[QLayout, QWidget], *, layout: Union[QLayout, str],
-                 spacing: int = None, margins: int = 0, attr: str = None):
+                 stretch=0, spacing: int = None, margins: int = 0, attr: str = None):
 
         if isinstance(layout, str):
             if layout == 'v': layout = QVBoxLayout()
             if layout == 'h': layout = QHBoxLayout()
         self.owner = owner
         self.parent = owner if isinstance(owner, QWidget) else owner.parentWidget()
+        self.stretch = stretch
         self.layout = layout
 
         if attr and attr.isidentifier():
@@ -41,7 +42,7 @@ class Block:
         if isinstance(self.owner, QWidget):
             self.owner.setLayout(self.layout)
         elif isinstance(self.owner, QLayout):
-            self.owner.addLayout(self.layout)
+            self.owner.addLayout(self.layout, stretch=self.stretch)
         else:
             raise TypeError(f"Invalid owner type '{self.owner.__class__.__name__}', "
                             f"expected 'QWidget' or 'QLayout'")
@@ -93,7 +94,7 @@ def pushed(widget: QWidget):
     finally: widget.setDown(False)
 
 
-def setFocusChain(owner: QWidget, *args: QWidget, loop=True):
+def setFocusChain(*args: QWidget, owner: QWidget, loop=True):
     for i in range(len(args) - 1):
         owner.setTabOrder(args[i], args[i+1])
     if loop: owner.setTabOrder(args[-1], args[0])
