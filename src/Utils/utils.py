@@ -209,9 +209,8 @@ def inject_args(initFunc):
     """ __init__ decorator.
         Automatically creates and initializes same-name object attrs based on args passed to '__init__'
     """
-
-    # TODO: does not assign to default values specified in function defenition;
-    # like '4' in folowing function: def f(a, b, c=4): ...
+    # TODO: does not assign to default values specified in function definition
+    #       like '4' in following function: def f(a, b, c=4): ...
     def init_wrapper(*args, **kwargs):
         _self = args[0]
         _self.__dict__.update(kwargs)
@@ -230,8 +229,8 @@ def inject_slots(at):
     """ __init__ decorator.
         Automatically creates and initializes same-name object slots based on args passed to '__init__'
     """
-    # TODO: does not assign to default values specified in function defenition;
-    # like '4' in following function: def f(a, b, c=4): ...
+    # TODO: does not assign to default values specified in function definition
+    #       like '4' in following function: def f(a, b, c=4): ...
     if (type(at) is not str):
         f = at
         at = 'start'
@@ -565,9 +564,8 @@ def listAttrs(obj, invoke=False, limit: int = None):
         print(f"{a} = {v}", sep=linesep)
 
 
+@legacy  # use chain() defined below
 def attachItem(iterable: Iterable, append=Null, prepend=Null):
-    # TODO: analyze first and second arguments' types and provide a clean seamless signature
-    #           (prepend, iterable, append) or (iterable, append) or (prepend, iterable) with no keyword arguments
     """ Attach one item to an iterable (before or/and after) and return resulting extended generator """
     if prepend is not Null: yield prepend
     yield from iterable
@@ -584,7 +582,7 @@ def chain(*items):
             if isinstance(item, str): yield item
             else: yield from item
         except TypeError as err:
-            # ▼ Re-raise errors occurred in inner frames (inside item)
+            # ▼ Re-raise errors occurred in inner frames (inside 'item')
             if err.__traceback__.tb_next is not None: raise err
             yield item
 

@@ -254,7 +254,7 @@ def Logger(name: str = ROOT, console: bool = True, file: str = None, qt: Callabl
 # particular logger objects on Logger function itself
 # in order not to import unbound names from this module
 Logger.all = logging.getLogger().manager.loggerDict
-
+# CONSIDER .all contains not only loggers, but some nasty PlaceHolders, etc.
 
 logging.setLoggerClass(ColoredLogger)
 colorama.init() if sys.stdout.isatty() else colorama.deinit()
