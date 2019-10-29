@@ -49,12 +49,10 @@ class ConfigLoader:
         raise NotImplementedError('JSON loader needs testing!')
 
     # Initialized in successors:
-    _loaded_: bool  # FIXME: deprecate this
     _ignoreUpdates_: bool
     __section__: str
 
     def __init_subclass__(cls, *, section):
-        cls._loaded_ = False
         cls._ignoreUpdates_ = False
         cls.__section__: str = section
         CONFIG_CLASSES.add(cls)
@@ -130,13 +128,11 @@ class ConfigLoader:
         else: log.warning(f"Nothing was loaded for '{cls.__section__}' "
                           f"from {cls.filename} (wrong section name specified?)")
 
-        cls._loaded_ = True
         log.debug(f"{cls.__name__}: {formatDict(dict(cls.members()))}")
 
     @classproperty
-    def updated(cls):  # TODO: rename this and correct docstring
-        """ Update internal config storage with actual class attrs (if ._ignoreUpdates_ is False)
-            Returns True if actual config has been changed, False otherwise, None if configured to ignore updates
+    def updated(cls):
+        """ Returns True if actual config has been changed, False otherwise, None if configured to ignore updates
             May be used to save current class config only: CFG.save(CFG.update())
             CONSIDER: Type casting and comparisons are shallow, so (True, 2, 3.0) == (1,2,3) is accepted
         """
@@ -294,7 +290,8 @@ class ConfigLoader:
                         for section, config in configsDict.items():
                             sectionDict = CONFIGS_DICT.setdefault(section, {})
                             if config is not None: sectionDict.update(config)
-                    log.debug(f"Config loaded: {formatDict(configsDict)}")
+                    log.debug(f"Loaded sections: "
+                              f"{', '.join(f'{sName}({len(cDict)})' for sName, cDict in configsDict.items())}")
                     return True  # succeeded loading from file
         except YAMLError as e:
             log.error(f"Failed to parse {filetype} file:{linesep}{e}")
