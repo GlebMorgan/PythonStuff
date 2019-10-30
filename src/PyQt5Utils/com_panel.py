@@ -245,7 +245,6 @@ class SerialCommPanel(QWidget):
         this.setEditable(True)
         this.setInsertPolicy(QComboBox.NoInsert)
         this.setFixedWidth(QFontMetrics(self.font()).horizontalAdvance('000') + self.height())
-        this.contents = ()
         this.colorer = Colorer(widget=this, base=this.lineEdit())
         action = self.actions.add(id='setPort', name='Change COM port', widget=this,
                                   slot=partial(self.changeSerialConfig, 'port'))
