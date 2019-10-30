@@ -10,6 +10,8 @@ from PyQt5.QtGui import QIcon, QMovie, QColor
 from PyQt5.QtWidgets import QAction, QSizePolicy, QActionGroup
 from PyQt5.QtWidgets import QWidget, QApplication, QHBoxLayout, QComboBox, QMenu
 
+# TODO: migrate to importlib.resources and install \res directory with PyQt5Utils
+from importlib.resources import path as resource_path
 from pkg_resources import resource_filename, cleanup_resources
 from serial.tools.list_ports_common import ListPortInfo as ComPortInfo
 from serial.tools.list_ports_windows import comports

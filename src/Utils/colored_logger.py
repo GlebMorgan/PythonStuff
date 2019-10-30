@@ -17,6 +17,7 @@ from .utils import classproperty
 # ✓ Do not add one-and-the-same handler to logger instance in Logger()
 #           (to eliminate duplicate logging output when running module via -m)
 
+# FIXME: Logging is not thread-safe for some reason...
 
 ROOT = 'Root'
 

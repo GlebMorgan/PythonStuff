@@ -55,6 +55,8 @@ log.setLevel('DEBUG')
 
 # TODO: Way to define api/internal methods and fields (other than by naming conventions)
 
+# TODO: remove OrderedSet dependency
+
 # ———————————————————————————————————————————————————— ToCONSIDER ———————————————————————————————————————————————————— #
 
 # ✓ Factory option: is it needed? ——► stick with searching for .copy attr
