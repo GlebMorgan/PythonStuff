@@ -11,8 +11,10 @@ setup(
     author_email='glebmorgan@gmail.com',
     description='Utilities to use cross-project',
     package_data={
-        'PyQt5Utils': ['res/refresh.gif'],
+        'PyQt5Utils': ['res/*.py', 'res/refresh.gif']
     },
-    install_requires=['PyQt5', 'stdlib_list', 'orderedset', 'pySerial',
-                      'colorama', 'coloredlogs', 'verboselogs']
+    install_requires=[
+        'PyQt5', 'stdlib_list', 'orderedset', 'pySerial',
+        'colorama', 'coloredlogs', 'verboselogs'
+    ]
 )

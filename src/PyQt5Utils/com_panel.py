@@ -10,9 +10,7 @@ from PyQt5.QtGui import QIcon, QMovie, QColor
 from PyQt5.QtWidgets import QAction, QSizePolicy, QActionGroup
 from PyQt5.QtWidgets import QWidget, QApplication, QHBoxLayout, QComboBox, QMenu
 
-# TODO: migrate to importlib.resources and install \res directory with PyQt5Utils
 from importlib.resources import path as resource_path
-from pkg_resources import resource_filename, cleanup_resources
 from serial.tools.list_ports_common import ListPortInfo as ComPortInfo
 from serial.tools.list_ports_windows import comports
 
@@ -51,7 +49,7 @@ log.setLevel('DEBUG')
 # True ––► test button and test methods are added
 DEBUG_MODE = False
 
-REFRESH_GIF = resource_filename(__name__, 'res/refresh.gif')
+REFRESH_ICON_RES = resource_path('PyQt5Utils.res', 'refresh.gif')
 
 
 class QDataAction(QAction):
@@ -253,7 +251,7 @@ class SerialCommPanel(QWidget):
         # this.lineEdit().setStyleSheet('background-color: rgb(200, 255, 200)')
         this.triggered.connect(action.trigger)
         this.setToolTip("COM port")
-        # NOTE: .validator and .colorer are set in updateComCombobox()
+        # NOTE: .validator is set in updateComCombobox()
         return this
 
     def newRefreshPortsButton(self):
@@ -261,12 +259,12 @@ class SerialCommPanel(QWidget):
         action = self.actions.add(id='refreshPorts', name='Refresh COM ports',
                                   slot=self.updateComPortsAsync, shortcut=QKeySequence("Ctrl+R"))
         this.clicked.connect(action.trigger)
-        this.setIcon(QIcon(REFRESH_GIF))
-        this.setIconSize(this.sizeHint() - QSize(10, 10))
-        this.anim = QMovie(REFRESH_GIF, parent=this)
+        with REFRESH_ICON_RES as path:
+            icon = str(path.resolve())
+            this.setIcon(QIcon(icon))
+            this.setIconSize(this.sizeHint() - QSize(10, 10))
+            this.anim = QMovie(icon, parent=this)
         this.anim.frameChanged.connect(lambda: this.setIcon(QIcon(this.anim.currentPixmap())))
-        if cleanup_resources() is not None:
-            log.warning(f"Failed to cleanup temporary resources (refresh icon): {cleanup_resources()}")
         this.setToolTip("Refresh COM ports list")
         return this
 
@@ -543,9 +541,6 @@ class SerialCommPanel(QWidget):
 
 if __name__ == '__main__':
 
-    # if len(log.handlers) == 2 and type(log.handlers[0] is type(log.handlers[1])):
-    #     del log.handlers[1]
-
     def testCommBinding(state):
         from random import randint
         if state is False and randint(0, 2) == 0:
@@ -582,7 +577,6 @@ if __name__ == '__main__':
     cp.bind(CommMode.Continuous, testCommBinding)
 
     l = QHBoxLayout()
-    # l.addWidget(QPushButton("Test", p))
     l.addWidget(cp)
     p.setLayout(l)
     p.show()
