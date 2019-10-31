@@ -10,9 +10,9 @@ FETCH_COMMAND = 'list'
 
 def get_port_pairs() -> List[Tuple[str, str]]:
     silent = '--silent' if SILENT_MODE else ''
-    exe = joinpath(envar('%ProgramFiles(x86)%'), 'com0com', 'setupc.exe')
+    exe = joinpath(envar('%ProgramFiles(x86)%'), 'com0com', 'setupc.exe').join('""')
 
-    # FIXME: Does not work if not running under admin - 'operation requires elevation'
+    # CONSIDER: Does not work if not running under admin - 'The requested operation requires elevation'
     result = run(args=' '.join((exe, silent, FETCH_COMMAND)), capture_output=True,
                  encoding='oem', creationflags=CREATE_NO_WINDOW)
 
