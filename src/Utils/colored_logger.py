@@ -2,7 +2,6 @@ import logging
 import os
 import sys
 from contextlib import contextmanager
-from types import SimpleNamespace
 from typing import List, Callable
 
 import colorama
@@ -57,7 +56,7 @@ class LogStyle:
     )
 
     cmdRecords = dict(
-            spam ={'color': 90},
+            spam={'color': 90},
            debug={'color': 0},
          verbose={'color': 97},
             info={'color': 'blue', 'bold': True},
@@ -98,7 +97,7 @@ SimpleLogRecordFormat = '{message}'
 LogDateFormat = '%H:%M:%S'
 
 
-class Formatters(SimpleNamespace):
+class Formatters:
     basic = logging.Formatter(
             fmt=LogRecordFormat, datefmt=LogDateFormat, style='{')
 
@@ -161,6 +160,8 @@ class ColoredLogger(VerboseLogger):
     def setConsoleHandler(self, formatter=Formatters.colored):
         """ Add StreamHandler with given formatter set (default - verbose colored)
         """
+        if hasattr(self, 'consoleHandler'):
+            self.handlers.remove(self.consoleHandler)
         self.consoleHandler = logging.StreamHandler()
         if self.name == ROOT:
             self.consoleHandler.setFormatter(Formatters.simpleColored)
@@ -171,12 +172,16 @@ class ColoredLogger(VerboseLogger):
     def setFileHandler(self, path: str, formatter=Formatters.basic):
         """ Add FileHandler with given formatter set (default - verbose w/o coloring)
         """
+        if hasattr(self, 'fileHandler'):
+            self.handlers.remove(self.fileHandler)
         self.fileHandler = logging.FileHandler(path)
         if self.name != ROOT:
             self.fileHandler.setFormatter(formatter)
         self.addHandler(self.fileHandler)
 
     def setQtHandler(self, slot: Callable, formatter=Formatters.simpleQtColored):
+        if hasattr(self, 'qtHandler'):
+            self.handlers.remove(self.qtHandler)
         try:
             self.qtHandler = QtHandler(slot)
         except NameError:
@@ -188,10 +193,17 @@ class ColoredLogger(VerboseLogger):
         """ Override. Formats errors in 'ErrorClass: message' format.
             'traceback' kwarg is an alias for 'exc_info'
         """
+
         if isinstance(msg, Exception):
-            msg = f'{msg.__class__.__name__}: {msg}'
+            err = msg
+            if err.args and err.args[0].strip():
+                msg = f'{msg.__class__.__name__}: {msg}'
+            else:
+                msg = msg.__class__.__name__
+
         if traceback is True:
             kwargs['exc_info'] = True
+
         return super()._log(level, msg, *args, **kwargs)
 
     @classmethod
@@ -277,6 +289,9 @@ if __name__ == '__main__':
 
     from .utils import formatDict
     print(f"Logger.all: {formatDict(Logger.all)}")
+
+    print('Sample:')
+
 
     if "PYCHARM_HOSTED" not in os.environ:
         input('Type to exit...')
