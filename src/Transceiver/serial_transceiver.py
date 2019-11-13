@@ -5,6 +5,7 @@ from typing import Tuple
 
 import serial
 from Utils import Logger, bytewise, legacy
+from .interface import Transceiver
 from .checksums import rfc1071
 from .errors import *
 
@@ -110,7 +111,7 @@ class SerialTransceiver(serial.Serial):
                     f"'{self.port}', {self.baudrate}, {self.bytesize}-{self.parity}-{self.stopbits}")
 
 
-class PelengTransceiver(SerialTransceiver):
+class PelengTransceiver(SerialTransceiver, Transceiver):
     AUTO_LRC: bool = False
     HEADER_LEN: int = 6  # in bytes
     STARTBYTE: int = 0x5A
@@ -168,7 +169,8 @@ class PelengTransceiver(SerialTransceiver):
             header = bytesReceived
             try:
                 return self.__readData(header)
-            except AddressMismatchError: return self.receivePacket()
+            except AddressMismatchError:
+                return self.receivePacket()
         elif (len(bytesReceived) == 0):
             raise SerialReadTimeoutError("No reply")
         elif (len(bytesReceived) < self.HEADER_LEN):
@@ -200,8 +202,10 @@ class PelengTransceiver(SerialTransceiver):
                     raise BadDataError("Bad header", dataname="Header", data=header)
                 if (not self.CHECK_RFC or int.from_bytes(rfc1071(header), byteorder='big') == 0):
                     log.info(f"Found valid header at pos {i * self.HEADER_LEN + startbyteIndex}")
-                    try: return self.__readData(header)
-                    except AddressMismatchError: self.receivePacket()
+                    try:
+                        return self.__readData(header)
+                    except AddressMismatchError:
+                        self.receivePacket()
             else: raise SerialCommunicationError("Cannot find header in datastream, too many attempts...")
         # TODO: Still have unread data at the end of the serial stream sometimes.
         #       Action that once caused the issue: sent 'ms 43 0' without adding a signal value (need to alter the code)
@@ -263,3 +267,7 @@ class PelengTransceiver(SerialTransceiver):
         bytesSentCount = self.write(packetToSend)
         slog.info(f"Packet [{len(packetToSend)}]: {bytewise(packetToSend)}")
         return bytesSentCount
+
+
+Transceiver.register(SerialTransceiver)
+Transceiver.register(PelengTransceiver)
