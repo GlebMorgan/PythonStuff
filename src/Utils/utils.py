@@ -531,7 +531,7 @@ def threaded(f):
     return runThreaded
 
 
-def testCOMs(comSeq=(1, 2, 10, 11, 12, 13)):
+def checkCOMs(comSeq=(1, 2, 10, 11, 12, 13)):
     from serial import Serial as S
     s = S(baudrate=912600, timeout=1, write_timeout=1)
     for i in comSeq:
