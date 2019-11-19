@@ -148,7 +148,7 @@ class AnnotationSpy(dict):
     """
 
     def __init__(self, metaclass):
-        self.owner: ClasstoolsType = metaclass
+        self.owner: Classtools = metaclass
         super().__init__()
 
     def __setitem__(self, attrname, annotation):
@@ -366,8 +366,8 @@ class Option:
 
     __setattr__ = denyAttrAccess
 
-class ClasstoolsType(type):  # CONSIDER: Classtools
-    """ TODO: ClasstoolsType docstring
+class Classtools(type):  # CONSIDER: Classtools
+    """ TODO: Classtools docstring
         Variables defined without annotations are not tagged
         SECTION without any attrs inside is not created
         Tag names are case-insensitive
@@ -713,7 +713,7 @@ class Section:
 
     __slots__ = 'type'
 
-    owner = ClasstoolsType
+    owner = Classtools
 
     def __init__(self, sectionType: str = None):
         self.type = sectionType
@@ -766,12 +766,12 @@ kw = Option('kw', flag=True)
 #     2) __options__ global variable
 #     3) Attr.__slots__
 #     4) Attr.__str__ option icons
-#     6) ClasstoolsType.resetOptions()
-#     7) ClassDict name injections in ClasstoolsType.__prepare__
+#     6) Classtools.resetOptions()
+#     7) ClassDict name injections in Classtools.__prepare__
 #     8) Option __doc__
 #     9) Check whether it is needed to add variable with new option
-#        to __slots__ in ClasstoolsType.__new__
-#     10) Is it needed to skip attr initialization with new option set in ClasstoolsType.__init_attrs__
+#        to __slots__ in Classtools.__new__
+#     10) Is it needed to skip attr initialization with new option set in Classtools.__init_attrs__
 
 attr = 'attr'  # placeholder for empty annotation
 OPTIONS = Section()
@@ -784,7 +784,7 @@ TAG = Section('tagger')
 
 
 def test_pickle():
-    class PT(metaclass=ClasstoolsType, slots=True):
+    class PT(metaclass=Classtools, slots=True):
         """ Pickle test, slots """
         void: attr
         e: attr = 'e_attr'
@@ -807,7 +807,7 @@ def test_pickle():
 
 
 def test_pickle_simple():
-    class PTS(metaclass=ClasstoolsType, slots=True):
+    class PTS(metaclass=Classtools, slots=True):
         """ Pickle test simple, slots"""
         a: attr = 1
     import pickle as p
@@ -819,7 +819,7 @@ def test_pickle_simple():
 def test_concise_tagging_basic():
 
     @classtools
-    class A(metaclass=ClasstoolsType, slots=True):
+    class A(metaclass=Classtools, slots=True):
 
         a0: str = -Attr() |tag('a')
         a: int = 4 |tag("a_var") |lazy('set_a') |const
@@ -874,7 +874,7 @@ def test_concise_tagging_basic():
 
 
 def test_inject_slots():
-    class B(metaclass=ClasstoolsType, slots=True):
+    class B(metaclass=Classtools, slots=True):
         a: attr = 7
         b: int = 0 |const |lazy('set_b')
 
@@ -882,7 +882,7 @@ def test_inject_slots():
     print(f"Has dict? {hasattr(b, '__dict__') and b.__dict__}")
     print(b.__slots__)
 
-    class C(metaclass=ClasstoolsType, slots=True):
+    class C(metaclass=Classtools, slots=True):
 
         a0: str = -Attr()
         a: int = 4 |tag("test") |lazy('set_a') |const
