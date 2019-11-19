@@ -784,14 +784,36 @@ TAG = Section('tagger')
 
 
 def test_pickle():
-    B = ...  # SomeClass
+    class PT(metaclass=ClasstoolsType, slots=True):
+        """ Pickle test, slots """
+        void: attr
+        e: attr = 'e_attr'
+        conv: int = 0
+        classAttr: ClassVar[str] = 'class_attr'
+        tag: attr = 7 |tag('test')
+        const: int = 42 |const
+        lazy: str = ... |lazy('getLazy')
+        kw: attr = ... |kw
+        skip: attr = 'skip_attr' |skip
+        def getLazy(self): return 'lazy_value'
+        def init(self, e=88): self.e = e
     import pickle as p
-    print(formatDict(B.__attrs__))
-    print(B().d)
-    pA = p.dumps(B(e_arg=88))
+    print(formatDict(PT.__attrs__))
+    print(PT('void_attr', kw='kw_attr').lazy)
+    pA = p.dumps(PT('void_attr', e=88, kw='kw_attr'))
     print(pA)
-    print(f"Unpickled same 'a' attr? - {p.loads(pA).a == B().a}")
+    print(f"Unpickled same 'e' attr? - {p.loads(pA).e == PT().e}")
     exit()
+
+
+def test_pickle_simple():
+    class PTS(metaclass=ClasstoolsType, slots=True):
+        """ Pickle test simple, slots"""
+        a: attr = 1
+    import pickle as p
+    pClass = p.dumps(PTS)
+    print(pClass)
+    print(f"Unpickled same 'a' attr? - {p.loads(pClass).a == PTS().a}")
 
 
 def test_concise_tagging_basic():
@@ -997,4 +1019,5 @@ if __name__ == '__main__':
     test_concise_tagging_basic()
     # test_all_types()
     # test_pickle()
+    # test_pickle_simple()
 
