@@ -175,6 +175,7 @@ class AnnotationSpy(dict):
 
         # ▼ Convert to Attr if not already
         if isinstance(var, Attr): var.name = attrname
+        elif var is Ellipsis: var = Attr()
         else: var = Attr(attrname, var)
 
         # ▼ Put annotation on its place, skip ATTR_ANNOTATION
@@ -273,20 +274,17 @@ class Option:
         |option(arg)  – set option value to arg (if supported)
         |-option      – disable option (or set value to None)
 
-        • default (option value)
-        • flag (option type):
-            flag=True  – option is True/False only, no parameters are accepted
-            flag=False – option stores a value, that must be provided as an argument
-            flag=None  – option stores a value, but argument could be omitted
-                            (Null will be used as a value in this case)
+        • default - option notset value)
+        • flag - option type:
+            flag=True  – option is True/False only, no parameters are accepted               - True|False
+            flag=False – option stores a value, that must be provided as an argument         - arg|False
+            flag=None  – option stores a value, but argument could be omitted (uses default) - True|False|arg
         ... TODO: Option docstring
     """
 
-    __slots__ = 'name', 'default', 'flag', 'incompatibles'
+    __slots__ = 'name', 'default', 'value', 'flag'
 
-    # ▼ Stores current value (changed by modifiers, reset after applying to attr)
-    value = Null
-
+    @legacy
     class setupMode:
         """ Decorator that allows __setattr__ inside the decorated method """
         def __init__(self, method):
@@ -299,57 +297,63 @@ class Option:
             self.method(self.instance, *args, **kwargs)
             self.instance.__class__.__setattr__ = self.instance.__class__.denyAttrAccess
 
-    @setupMode
-    def __init__(self, name, *, default, flag: Union[bool, None], hates=None):
-        self.name = name
-        self.default = default  # default value, <bool> if .flag == True
-        self.flag = flag  # require/allow/deny argument
-        # ▼ TODO: Option.incompatibles (on demand)
-        self.incompatibles = hates  # option(s) that cannot be applied before current one
+    # @setupMode
+    def __init__(self, name, *, default: Any = False, flag: Union[bool, None]):
+        super().__setattr__('name', name)
+        super().__setattr__('default', default)
+        super().__setattr__('flag', flag)
+        # for attr in ('name', 'default', 'flag', 'init'):
+        #     super().__setattr__(attr, locals()[attr])
 
     def __ror__(self, other):
-
-        # ▼ Set .value to appropriate default if option used with no modifiers
-        if self.value is Null:
+        if not hasattr(self, 'value'):
             if self.flag is False:
                 raise ClasstoolsError(f"Option '{self.name}' requires an argument")
-            elif self.flag is True:
-                self.__class__.value = True
-            # else: value remains Null
+            super().__setattr__('value', True)
+        return self.__apply__(other)
 
-        # ▼ If applied to Section, change section-common defaults via Section.classdict
-        if isinstance(other, Section):
-            other.owner.currentOptions[self.name] = self.value
-
-        # ▼ Else, convert 'other' to Attr() and apply option to it
-        else:
-            if not isinstance(other, Attr):
-                other = Attr(value=other)
-            if hasattr(other, self.name):
-                raise ClasstoolsError(f"Duplicate option '{self.name}'; "
-                                      f"was already set to {getattr(other, self.name)}")
-            setattr(other, self.name, self.value)
-
-        # ▼ Reset .value if altered by modifiers
-        self.__class__.value = Null
-        return other
+    def __rtruediv__(self, other):
+        # NOTE: disabling an option with assigned argument will reset it
+        super().__setattr__('value', False)
+        return self.__apply__(other)
 
     def __call__(self, arg):
         if self.flag is True:
             raise ClasstoolsError(f"Option '{self.name}' is not callable")
-        self.__class__.value = arg
-        return self
+        option = self.__class__(self.name, default=self.default, flag=self.flag)
+        super(type(option), option).__setattr__('value', arg)
+        return option
 
-    def __neg__(self):
-        # NOTE: disabling an option with assigned argument will reset it
-        self.__class__.value = False if self.flag is True else None
-        return self
+    def __apply__(self, target):
+
+        # ▼ Skip ignored attrs
+        if target is Attr.IGNORED:
+            return target
+
+        # ▼ If applied to Section, change section-common defaults via Section.classdict
+        if isinstance(target, Section):
+            target.owner.sectionOptions[self.name] = self.value
+
+        # ▼ Else, convert 'target' to Attr() and apply option to it
+        else:
+            if target is Ellipsis:
+                target = Attr()
+            if not isinstance(target, Attr):
+                target = Attr(value=target)
+            if hasattr(target, self.name):
+                raise ClasstoolsError(f"Duplicate option '{self.name}'; "
+                                      f"was already set to {getattr(target, self.name)}")
+            setattr(target, self.name, self.value)
+
+        del self.value
+        return target
 
     def __repr__(self): return auto_repr(self, self.name)
 
     def denyAttrAccess(self, name, value):
         raise AttributeError(f"'{self.name}' object is not intended to use beyond documented syntax")
 
+    __setattr__ = denyAttrAccess
 
 class ClasstoolsType(type):  # CONSIDER: Classtools
     """ TODO: ClasstoolsType docstring
@@ -667,18 +671,21 @@ def test_concise_tagging_basic():
     @classtools
     class A(metaclass=ClasstoolsType, slots=True):
 
-        a0: str = -Attr()
-        a: int = 4 |tag("test") |lazy('set_a') |const
+        a0: str = -Attr() |tag('a')
+        a: int = 4 |tag("a_var") |lazy('set_a') |const
         c: Any = 3
+        lazy('will_be_ignored')
+        test: attr = 'works!' /const
 
         with OPTIONS |lazy('tag_setter'):
             e: attr
             f: int = Attr(0, const=True) |tag('classic')
+            m: attr = 7 |lazy('get_m')
 
-        with TAG['tag'] |-init:
-            b: str = 'loool' |init
+        with TAG['tag'] |skip:
+            b: str = 'loool' /skip
             d: ClassVar[int] = 0 |const
-            g: ClassVar[int] = 42 |lazy
+            g: ClassVar[int] = 42 |tag(None)
             k: ClassVar[str] = 'clsvar'
 
         h: list = []
@@ -689,24 +696,31 @@ def test_concise_tagging_basic():
 
         def get_g(self): return 33
 
-        def init(self, e_arg=88):
-            self.e = e_arg
+        def get_m(self): return 'm_value'
 
-    print(formatDict(A.__attrs__))
-    print(formatDict(A.__tags__))
+        def get_test(self): return 'test_value'
+
+        def init(self, e_arg=88): self.e = e_arg
+
     print(formatDict(A.__dict__))
+    print(formatDict(A.__tags__))
     print(hasattr(A(), '__dict__'))
     print(f".a = {A().a}")
     print(f".b = {A().b}")
     print(f".c = {A(c=9).c}")
     print(f".d = {A().d}")
-    print(f".g = {A().g}")  # CONSIDER: why A().g does not raise AttributeError? g is not in __slots__!
+    try: A().d = 'will_fail'
+    except AttributeError as e: print(f"Attempt to assign to const: {e}")
+    else: print("Const descriptor does not work!")
+    print(f".g = {A().g}")
     print(f".k = {A().k}")
+    print(f".m = {A().m}")
+    print(f".e (with e_arg) = {A(e_arg=4).e}")
+    print(f".e = {A().e}")
+    print(f".test = {A().test}")
     print(f".__slots__ = {A().__slots__}")
     print(f"Are ints equal? - {A().a is A().a}")
     print(f"Are lists equal? - {A().h is A().h}")
-    print(f".e (with e_arg) = {A(e_arg=4).e}")
-    print(f".e = {A().e}")
 
 
 def test_inject_slots():
