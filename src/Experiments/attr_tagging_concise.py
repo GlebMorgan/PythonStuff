@@ -199,20 +199,20 @@ class AnnotationSpy(dict):
         # ▼ Set .type with removed 'ClassVar[...]' and 'attr'
         var.type = annotation
 
-        if var.default is Null or (var.classvar is False and (self.owner.injectSlots or not STORE_DEFAULTS)):
+        if var.default is Null or (var.classvar is False and (self.owner.slots or not STORE_DEFAULTS)):
             if attrname in clsdict: del clsdict[attrname]
         else:
             clsdict[attrname] = var.default
 
         # NOTE: Alternative version
-        # if var.default is Null \
-        # or (self.owner.injectSlots and var.classvar is False) \
-        # or (not STORE_DEFAULTS and var.classvar is False):
+        # if var.default is Null
+        # or self.owner.slots and var.classvar is False
+        # or not STORE_DEFAULTS and var.classvar is False:
 
         # ▼ Set options which was not defined earlier by option definition objects / Attr kwargs
         for option in (__options__):
             if not hasattr(var, option):
-                setattr(var, option, self.owner.currentOptions[option])
+                setattr(var, option, self.owner.sectionOptions[option])
 
         # NOTE: 'None' is a valid tag key (to allow for an easy sample of all non-tagged attrs)
         self.owner.tags[var.tag].add(attrname)
@@ -371,7 +371,7 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
 
     enabled: bool
 
-    currentOptions: Dict[str, Any]
+    sectionOptions: Dict[str, Any]
     clsdict: Dict[str, Any]
     tags: DefaultDict[str, OrderedSet]
     attrs: Dict[str, Attr]
@@ -383,7 +383,7 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
         metacls.enabled = enable
         if enable is False: return {}
 
-        metacls.injectSlots = slots
+        metacls.slots = slots
         metacls.autoInit = autoinit
 
         metacls.clsdict = {}
@@ -391,7 +391,7 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
         metacls.attrs = metacls.clsdict.setdefault('__attrs__', {})
         metacls.annotations = metacls.clsdict.setdefault('__annotations__', AnnotationSpy(metacls))
 
-        metacls.currentOptions: Dict[str, Any] = {}
+        metacls.sectionOptions: Dict[str, Any] = {}
 
         # ▼ Initialize options
         metacls.resetOptions()
@@ -447,7 +447,7 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
         #                               f"conflict with {clsname} attr names")
 
         # ▼ Inject slots from all non-classvar attrs, if configured accordingly
-        if metacls.injectSlots:
+        if metacls.slots:
             clsdict['__slots__'] = tuple(attrobj.name for attrobj in metacls.attrs.values() if not attrobj.classvar)
 
         # ▼ Generate __init__() function, 'init()' is used to further initialize object
@@ -536,8 +536,8 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
 
     @classmethod
     def resetOptions(metacls):
-        metacls.currentOptions.update({option.name: option.default for option in (tag, init, const, lazy)})
-
+        metacls.sectionOptions.update(
+                {option.name: option.default for option in (tag, init, const, lazy)})
 
 class LazyDescriptor:
     """
@@ -614,7 +614,7 @@ class Section:
         if self.type == 'tagger':
             if len(args) != 1:
                 raise TypeError(f"Section '{self.type}' requires single argument: 'tag'")
-            self.owner.currentOptions[tag.name] = args[0]
+            self.owner.sectionOptions[tag.name] = args[0]
         else: raise ClasstoolsError("Section does not support arguments")
         return self
 
