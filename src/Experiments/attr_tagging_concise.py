@@ -10,7 +10,7 @@ from typing import Any, ClassVar, Union, Dict, DefaultDict
 from Utils import auto_repr, Null, Logger, attachItem, formatDict, isDunder, legacy
 from orderedset import OrderedSet
 
-__options__ = 'tag', 'init', 'const', 'lazy'
+__options__ = 'tag', 'skip', 'const', 'lazy', 'kw'
 
 __all__ = 'attr', 'TAG', 'OPTIONS', *__options__
 
@@ -223,25 +223,25 @@ class Attr:
     """
         Attrs objects are created from all ANNOTATED variables defined inside class body
             Exceptions are:
-                • __service_var__ = smth  – dunder variables
+                • __service_var__ = smth – dunder variables
                 • var: type = Attr.ignore() – explicitly marked to be ignored
             ...
         Mutable defaults must provide .copy() method (no-args) that is used to initialize object attrs;
             otherwise all objects will refer to one-and-the-same object stored in __attrs__.default
         ... TODO: Attr docstring
-        Repr icons:  # CONSIDER: change to ascii because of console does not support utf-8 and monospaced font breaks
+        Repr icons:  # CONSIDER: change to ascii because console does not support utf-8 and monospaced font breaks
             Attr      instance attr
             ClassAttr class attr
             [...]     default value
             <...>     declared type
             ⚑...      tag
-            ⛔        NO init
-            🔒        const
-            🕓        lazy
+            ∅         skip
+            🔒         const
+            🕓         lazy
     """
 
     # ▼ ' ... , *__options__' is not used here because PyCharm fails to resolve attributes this way round
-    __slots__ = 'name', 'default', 'type', 'classvar', 'tag', 'init', 'const', 'lazy'
+    __slots__ = 'name', 'default', 'type', 'classvar', 'tag', 'skip', 'const', 'lazy', 'kw'
 
     IGNORED = type("ATTR_IGNORE_MARKER", (), dict(__slots__=()))()
 
@@ -253,9 +253,16 @@ class Attr:
             setattr(self, name, value)
 
     def __str__(self):
-        return f"{'Class' if self.classvar else ''}Attr '{self.name}' [{self.default}] <{self.type or ' '}>" \
-               f"{f' ⚑{self.tag}'*(self.tag is not None)}{' ⛔'*(not self.init)}{' 🔒'*self.const}" \
-               f"{' 🕓'*(self.lazy is not False)}"
+        return (
+            f"{'Class'*(self.classvar)}Attr '{self.name}'"
+            + f" [{self.default}]"
+            + f" <{self.type or ' '}>"
+            + f' ⚑{self.tag}' * (self.tag is not None)
+            + f' 🕓{self.lazy}' * (self.lazy is not False)
+            + ' 🔒' * self.const
+            + ' ∅' * self.skip
+            + ' =' * self.kw
+        )
 
     def __repr__(self): return auto_repr(self, self.name)
 
@@ -400,9 +407,10 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
             # ▼ CONSIDER: adjustable names below
             metacls.clsdict['attr'] = attr
             metacls.clsdict['tag'] = tag
-            metacls.clsdict['init'] = init
+            metacls.clsdict['skip'] = skip
             metacls.clsdict['const'] = const
             metacls.clsdict['lazy'] = lazy
+            metacls.clsdict['kw'] = kw
 
         return metacls.clsdict
 
@@ -630,10 +638,22 @@ def classtools(cls):
 
 
 # TODO: Move all options to options.py, define __all__ there and import options as 'from options import *'
+""" Assign a tag to attr and adds it to __tags__ dict """
 tag = Option('tag', default=None, flag=False)
-init = Option('init', default=True, flag=True)
-const = Option('const', default=False, flag=True)
-lazy = Option('lazy', default=False, flag=None)
+
+""" Exclude attr from initialization machinery """
+skip = Option('skip', flag=True)
+
+""" Deny value assignments (uses descriptor) """
+const = Option('const', flag=True)
+
+""" Evaluate value on first access, store it and return 
+    stored value on all subsequent queries (uses descriptor) """
+lazy = Option('lazy', flag=False)
+
+""" Use attr as keyword-only argument in __init__ """
+kw = Option('kw', flag=True)
+
 
 # TODO: review this in the end
 # If adding new option, add it to:
@@ -644,6 +664,9 @@ lazy = Option('lazy', default=False, flag=None)
 #     6) ClasstoolsType.resetOptions()
 #     7) ClassDict name injections in ClasstoolsType.__prepare__
 #     8) Option __doc__
+#     9) Check whether it is needed to add variable with new option
+#        to __slots__ in ClasstoolsType.__new__
+#     10) Is it needed to skip attr initialization with new option set in ClasstoolsType.__init_attrs__
 
 attr = Attr()
 OPTIONS = Section()
