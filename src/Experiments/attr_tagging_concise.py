@@ -19,7 +19,7 @@ log.setLevel('DEBUG')
 
 # ——————————————————————————————————————————————————— KNOWN ISSUES ——————————————————————————————————————————————————— #
 
-# FIXME: |const breaks pickling
+# FIXME: pickle does not work
 
 # FIXME: options state is saved until ror is called, no control over isolated option config and its application to attr
 
@@ -57,6 +57,8 @@ log.setLevel('DEBUG')
 
 # TODO: remove OrderedSet dependency
 
+# TODO: add |type option to check types
+
 # ———————————————————————————————————————————————————— ToCONSIDER ———————————————————————————————————————————————————— #
 
 # ✓ Factory option: is it needed? ——► stick with searching for .copy attr
@@ -73,6 +75,8 @@ log.setLevel('DEBUG')
 
 # ▼ CONSIDER: check non-annotated attrs not only for being Attr instances, but for all other service Classtools classes
 #             (may use kind of AbcMeta here for isinstance check): here + non-annotated attrs check
+
+# CONSIDER: add pre-check for 'non-default argument follows default argument' situation
 
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 
@@ -433,11 +437,12 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
 
         # ▼ Deny ATTR_ANNOTATION in annotations and generic structures, if configured accordingly
         if not ALLOW_ATTR_ANNOTATIONS:
+            # CONSIDER: if this ▼ additional check needed here?
             if ATTR_ANNOTATION in metacls.annotations:
                 raise ClasstoolsError(f"Classtools is configured to deny '{ATTR_ANNOTATION}' annotations")
             for attrname, annotation in metacls.annotations.items():
                 if len(findall(rf'\W({ATTR_ANNOTATION})\W', annotation)) > 0:
-                    raise ClasstoolsError(f"Attr '{attrname}: {annotation}': Classtools is configured to deny "
+                    raise ClasstoolsError(f"Attr '{attrname}: {annotation}' - Classtools is configured to deny "
                                           f"'{ATTR_ANNOTATION}' annotations inside generic structures")
 
         # ▼ Deny Classtools service objects assignments to class variables or attrs, if configured accordingly
@@ -456,63 +461,150 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
 
         # ▼ Inject slots from all non-classvar attrs, if configured accordingly
         if metacls.slots:
-            clsdict['__slots__'] = tuple(attrobj.name for attrobj in metacls.attrs.values() if not attrobj.classvar)
+            metacls.injectSlots(clsdict)
+
+        # ▼ Configure attr descriptors based on options being set
+        metacls.setupDescriptors(clsdict)
 
         # ▼ Generate __init__() function, 'init()' is used to further initialize object
-        clsdict['__init__'] = metacls.__init_attrs__
+        # clsdict['__init__'] = metacls.__init_attrs__
+        metacls.injectInit(clsdict)
+
+        # ▼ Generate __getattr__ function handling first access to lazy evaluated attrs
+        metacls.injectGetattr(clsdict)
 
         # ▼ Convert annotation spy to normal dict
         clsdict['__annotations__'] = dict(metacls.annotations)
 
         return super().__new__(metacls, clsname, bases, clsdict)
 
-    def __init_attrs__(attr, *a, **kw):
+    @classmethod
+    def injectSlots(metacls, clsdict):
+        slots = []
+        for name, attr in metacls.attrs.items():
+            if attr.classvar is True:
+                continue
+            if attr.const is not False:
+                slots.append(f'{name}_slot')
+            else:
+                slots.append(name)
+                clsdict['__slots__'] = tuple(slots)
+
+    @classmethod
+    def injectInit(metacls, clsdict):
+        args = []
+        kwargs = []
+        lines = []
+        for name, attr in metacls.attrs.items():
+
+            # ▼ Skip classvars and attrs with incompatible options
+            if any((attr.classvar, attr.lazy, attr.skip)):
+                continue
+
+            # ▼ Create attr entry and its value
+            item = name
+            value = name
+
+            # ▼ Append type annotation, if provided
+            if attr.type is not EMPTY_ANNOTATION:
+                item += ': ' + attr.type
+
+            # ▼ Append default value assignment, if provided
+            if attr.default is not Null:
+                item += ' = ' + f"__attrs__['{name}'].default"
+                if hasattr(attr.default, 'copy') and hasattr(attr.default.copy, '__call__'):
+                    value += '.copy()'
+
+            # ▼ Add assignment to args or kwargs section
+            getattr(kwargs if attr.kw is not False else args, 'append')(item)
+
+            if attr.const:
+                lines.append(f"self.{name}_slot = {value}")
+            else:
+                lines.append(f'self.{name} = {value}')
+
+        # ▼ Capture possible arguments for .init()
+        args.append('*args')
+        kwargs.append('**kwargs')
+
+        # ▼ Call .init(), if provided
+        try: clsdict.get('init').__call__
+        except AttributeError: log.spam(f'init() is not provided')
+        else: lines.append('self.init(*args, **kwargs)')
+
+        # ▼ Skip if nothing to init
+        if not lines: return
+
+        # ▼ Format and compile __init__ function
+        globs = {'__attrs__': metacls.attrs}
+        template = f"def __init__(self, {', '.join(args)}, {', '.join(kwargs)}):\n    " + '\n    '.join(lines)
+        log.debug('Generated __init__():\n'+template)
+        eval(compile(template, '<classtools generated init>', 'exec'), globs, clsdict)
+
+    @classmethod
+    def injectGetattr(metacls, clsdict):
+        for attr in metacls.attrs.values():
+            if attr.lazy is not False:
+                try:
+                    clsdict.get(attr.lazy).__call__
+                except AttributeError:
+                    raise ClasstoolsError(f"Cannot find lazy evaluation method"
+                                          f"'{attr.lazy}' for attr '{attr.name}'")
+
+        def evalLazyAttrs(self, name):
+            if name in metacls.attrs.keys():
+                getter = metacls.attrs[name].lazy
+                if getter is not False:
+                    try:
+                        result = getattr(self, getter)()  # TESTME: recursion risk???
+                    except GetterError:
+                        if attr.default is Null:
+                            raise ClasstoolsError(f"Failed to compute '{attr.name}' value, .default is not provided")
+                        result = attr.default
+                    setattr(self, name, result)
+                    return result
+            attrTypeName = 'slot' if metacls.injectSlots else 'attribute'
+            raise AttributeError(f"'{self.__class__.__name__}' object has no {attrTypeName} '{name}'")
+
+        clsdict['__getattr__'] = evalLazyAttrs
+
+    @classmethod
+    def setupDescriptors(metacls, clsdict):
+        for attr in metacls.attrs.values():
+            name = attr.name
+            # if not attr.classvar: continue ???
+
+            if attr.const is not False:
+                if attr.classvar:
+                    setattr(metacls, name, ConstDescriptor())
+                else:
+                    clsdict[name] = ConstDescriptor()
+
+    @legacy
+    def __init_attrs__(owner, *a, **kw):
         """ This is gonna be new class's __init__ method """
 
-        attrsls = attr.__class__
-        log.debug(f"__init_attrs__: self={attrsls.__name__}, args={a}, kwargs={kw}")
+        log.debug(f"__init_attrs__: self={owner.__class__.__name__}, args={a}, kwargs={kw}")
 
-        for name, currAttr in attr.__attrs__.items():
-            if currAttr.classvar is True: continue
+        for name, attr in owner.__attrs__.items():
+
+            # ▼ Skip classvars and attrs with incompatible options
+            if any((attr.classvar, attr.lazy, attr.skip)): continue
+            # TESTME: ▲ Test this and all the rest
 
             # ▼ Get attr value from arguments or .default
             try:
                 value = kw.pop(name)
             except KeyError:
-                try: value = currAttr.default.copy()
-                except AttributeError: value = currAttr.default
-            else:
-                if currAttr.init is False:
-                    raise ClasstoolsError(f"Attr '{name}' is configured no-init")
+                try:
+                    value = attr.default.copy()
+                except AttributeError:
+                    value = attr.default
 
-            if currAttr.default is Null and currAttr.lazy is False:
-                continue  # ◄ NOTE: attr is not initialized at all, options are ignored
-
-            # ▼ Analyze options and modify value if necessary
-            elif currAttr.lazy is not False:
-                getter = currAttr.lazy
-                if getter is Null: getter = f'get_{name}'
-                if not isinstance(getter, str):
-                    raise ClasstoolsError(f"Attr '{name}': invalid lazy attr getter "
-                                          f"(expected <str>, got {type(getter)}")
-                if not hasattr(attr, getter):
-                    raise ClasstoolsError(f"Class '{attrsls.__name__}' does not have "
-                                          f"getter method '{getter}' for '{name}' attr")
-                if currAttr.const is True:
-                    # noinspection PyArgumentList
-                    setattr(attrsls, name, LazyConstDescriptor(value, getter))
-                else:
-                    setattr(attrsls, name, LazyDescriptor(value, getter))
-            elif currAttr.const is True:
-                setattr(attrsls, name, ConstDescriptor(value))
-            else:
-                setattr(attr, name, value)
-
-        # CONSIDER: move configuration code in a separate function if it will take a lot of place
-        # self.__class__._configureAttrs_()
+            setattr(owner, name, value)
 
         # ▼ TODO: handle arguments-related errors here
-        if hasattr(attr, 'init'): attr.init(*a, **kw)
+        if hasattr(owner, 'init'): owner.init(*a, **kw)
 
     @staticmethod
     def mergeTags(parents, currentTags):
@@ -545,60 +637,73 @@ class ClasstoolsType(type):  # CONSIDER: Classtools
     @classmethod
     def resetOptions(metacls):
         metacls.sectionOptions.update(
-                {option.name: option.default for option in (tag, init, const, lazy)})
+                {option.name: option.default for option in (tag, skip, const, lazy, kw)})
 
-class LazyDescriptor:
-    """
-        TODO: Descriptors docstrings
-        If getter raises GetterError, default is returned (on current attr access)
-    """
 
-    __slots__ = 'value', 'default', 'getter'
-
-    def __init__(self, value, getter):
-        self.getter: str = getter
-        self.default = value
-        self.value = Null
-
-    def __get__(self, instance, owner):
-        # ▼ Access descriptor itself from class
-        if instance is None: return self
-        if self.value is Null:
-            try: self.value = getattr(instance, self.getter)()
-            except GetterError:
-                if self.default is Null:
-                    raise ClasstoolsError("Failed to fallback to .default as it is not provided")
-                return self.default
-        return self.value
-
-    def __set__(self, instance, value):
-        self.value = value
-
-    # CONSIDER: __delete__ — ?
+# class LazyDescriptor:
+#     """
+#         TODO: Descriptors docstrings
+#         If getter raises GetterError, default is returned (on current attr access)
+#     """
+#
+#     __slots__ = 'name', 'values', 'default', 'getter'
+#
+#     def __init__(self, default, getter):
+#         self.default = default
+#         self.getter: str = getter
+#         self.values: dict = {}
+#
+#     def __set_name__(self, owner, name):
+#         self.name = name
+#
+#     def __get__(self, instance, owner):
+#         # ▼ Access descriptor itself from class
+#         if instance is None: return self
+#
+#         try:
+#             return self.values[instance]
+#         except KeyError:
+#             try:
+#                 self.values[instance] = getattr(instance, self.getter)()
+#             except GetterError:
+#                 if self.default is Null:
+#                     raise ClasstoolsError(f"Failed to compute '{self.name}' value, .default is not provided")
+#                 self.values[instance] = self.default
+#             return self.values[instance]
+#
+#     def __set__(self, instance, value):
+#         self.values[instance] = value
+#
+#     # CONSIDER: __delete__ — ?
 
 
 class ConstDescriptor:
-    __slots__ = 'value'
+    __slots__ = 'name', 'slot'
 
-    def __init__(self, value):
-        self.value = value
+    def __set_name__(self, owner, name):
+        self.name = name
+        self.slot = getattr(owner, f'{name}_slot')
 
     def __get__(self, instance, owner):
         # ▼ Access descriptor itself from class
         if instance is None: return self
-        return self.value
+        return self.slot.__get__(instance, owner)
 
     def __set__(self, instance, value):
-        # ▼ Access descriptor itself from class
-        if instance is None: return self
-        raise AttributeError("Cannot change constant attr")
+        try:
+            self.slot.__get__(instance, type(instance))
+        except AttributeError:
+            self.slot = value
+        else:
+            raise AttributeError(f"Attr '{self.name}' is declared constant")
+            # CONSIDER: when using __slots__, this msg is not printed --► need to make unified?
 
 
-class LazyConstDescriptor:
-    __slots__ = LazyDescriptor.__slots__
-    __init__ = LazyDescriptor.__init__
-    __get__ = LazyDescriptor.__get__
-    __set__ = ConstDescriptor.__set__
+# class LazyConstDescriptor:
+#     __slots__ = LazyDescriptor.__slots__
+#     __init__ = LazyDescriptor.__init__
+#     __get__ = LazyDescriptor.__get__
+#     __set__ = ConstDescriptor.__set__
 
 
 class Section:
@@ -668,7 +773,7 @@ kw = Option('kw', flag=True)
 #        to __slots__ in ClasstoolsType.__new__
 #     10) Is it needed to skip attr initialization with new option set in ClasstoolsType.__init_attrs__
 
-attr = Attr()
+attr = 'attr'  # placeholder for empty annotation
 OPTIONS = Section()
 TAG = Section('tagger')
 
