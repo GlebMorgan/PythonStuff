@@ -7,7 +7,7 @@ from operator import setitem
 from re import findall
 from typing import Any, ClassVar, Union, Dict, DefaultDict
 
-from Utils import auto_repr, Null, Logger, attachItem, formatDict
+from Utils import auto_repr, Null, Logger, attachItem, formatDict, isDunder, legacy
 from orderedset import OrderedSet
 
 __options__ = 'tag', 'init', 'const', 'lazy'
@@ -117,22 +117,30 @@ class GetterError(RuntimeError):
 
 class AnnotationSpy(dict):
     """
-        Dict-like class that intercepts annotation assignments and processes all newly defined
-            annotated class variables with __attrs__ creation machinery
-        General conceptual mechanics:
-            1. variable value is converted to Attr(), if not already
-            2. attr.default is auto-assigned with fallback default, if provided via |autoinit
-            3. considering that default value is provided, it is stored in class dict if:
-                • attr is marked as ClassVar
+        Dict-like class that intercepts annotation assignments and processes all
+            newly defined annotated class variables with __attrs__ creation machinery
+
+        General conceptual mechanics of adding new attr to class:
+            • Variable value is converted to Attr(), if not already
+            • If fallback default is provided via |autoinit option,
+                it is automatically assigned to attr.default
+            • Considering that attr.default is provided, attr is stored in class dict if either:
+                • attr is annotated as ClassVar
                 • both Classtools |slots option is False and STORE_DEFAULTS config option is True
-            4. attr options that have not been set are assigned with their respective defaults
-            5. attr is added to __tags__ and __slots__ dicts
-        Pay attention:
-            • Dunder attrs are ignored (left alone as class attrs), if ALLOW_DUNDER_ATTRS config option is False
-            • Attr.IGNORED attrs are completely removed from class as if there were only type-annotated name
-            • ClassVar annotation is not included into attr.type, annotations is left unchanged
-            • If annotated with ATTR_ANNOTATION: name is not added to annotations, attr.type is left empty
-            • Annotations must be strings, error is raised otherwise
+            • Attr options that have not been set are assigned with their respective defaults
+            • Attr is added to __tags__ and __slots__ dicts
+
+        Detail:
+            • If ALLOW_DUNDER_ATTRS config option is False,
+                dunder attrs are ignored (are left alone as class attrs)
+            • Attr.IGNORED attrs are completely removed from class
+                as if they were only type-annotated names
+            • ClassVar annotation is not included into attr.type,
+                though annotations are left unchanged (except for ATTR_ANNOTATION)
+            • If variable is annotated with ATTR_ANNOTATION,
+                variable is not added to annotations and attr.type is left empty
+            • Annotations must be strings, error is raised otherwise,
+                this encourages using 'from __future__ import annotations'
     """
 
     def __init__(self, metaclass):
@@ -144,25 +152,25 @@ class AnnotationSpy(dict):
         default = self.owner.autoInit
 
         clsdict = self.owner.clsdict
+
+        # ▼ Get assigned value or default
         var = clsdict.get(attrname, default)
 
         # ▼ Deny non-string annotations
         if not isinstance(annotation, str):
-            raise ClasstoolsError(f"Attr '{attrname}': annotation must be a string; "
-                                  f"use quotes or 'from __future__ import annotations'")
+            raise ClasstoolsError(f"Attr '{attrname}' - annotation must be a string. "
+                                  f"Use quotes or 'from __future__ import annotations'")
 
         # ▼ Skip dunder attrs, if configured accordingly
-        if not ALLOW_DUNDER_ATTRS:
-            # ▼ TODO: replace this with enum._is_dunder()
-            if attrname.startswith('__') and attrname.endswith('__'):
-                return super().__setitem__(attrname, annotation)
+        if not ALLOW_DUNDER_ATTRS and isDunder(attrname):
+            return super().__setitem__(attrname, annotation)
 
         # ▼ Skip and remove ignored attrs from class dict
         if var is Attr.IGNORED:
-            del clsdict[attrname]
             if annotation == ATTR_ANNOTATION:
-                raise ClasstoolsError(f"Attr '{attrname}': cannot use '{ATTR_ANNOTATION}' "
+                raise ClasstoolsError(f"Attr '{attrname}' - cannot use '{ATTR_ANNOTATION}' "
                                       f"annotation with ignored attrs")
+            del clsdict[attrname]
             return super().__setitem__(attrname, annotation)
 
         # ▼ Convert to Attr if not already
@@ -187,7 +195,7 @@ class AnnotationSpy(dict):
         else:
             var.classvar = False
 
-        # ▼ Set .type with removed 'ClassVar' and 'attr'
+        # ▼ Set .type with removed 'ClassVar[...]' and 'attr'
         var.type = annotation
 
         if var.default is Null or (var.classvar is False and (self.owner.injectSlots or not STORE_DEFAULTS)):
@@ -208,10 +216,6 @@ class AnnotationSpy(dict):
         # NOTE: 'None' is a valid tag key (to allow for an easy sample of all non-tagged attrs)
         self.owner.tags[var.tag].add(attrname)
         self.owner.attrs[attrname] = var
-
-    def setitem(self, key, value):
-        """ __setitem__ for internal use """
-        return super().__setitem__(key, value)
 
 
 class Attr:
