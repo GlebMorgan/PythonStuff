@@ -399,6 +399,7 @@ class Classtools(type):  # CONSIDER: Classtools
         metacls.slots = slots
         metacls.autoInit = autoinit
 
+        metacls.clsname = clsname
         metacls.clsdict = {}
         metacls.tags = metacls.clsdict.setdefault('__tags__', defaultdict(OrderedSet))
         metacls.attrs = metacls.clsdict.setdefault('__attrs__', {})
@@ -486,44 +487,54 @@ class Classtools(type):  # CONSIDER: Classtools
         for name, attr in metacls.attrs.items():
             if attr.classvar is True:
                 continue
-            if attr.const is not False:
+            if attr.const is True:
                 slots.append(f'{name}_slot')
             else:
                 slots.append(name)
-                clsdict['__slots__'] = tuple(slots)
+        clsdict['__slots__'] = tuple(slots)
 
     @classmethod
     def injectInit(metacls, clsdict):
         args = []
         kwargs = []
         lines = []
+
         for name, attr in metacls.attrs.items():
 
             # ▼ Skip classvars and attrs with incompatible options
-            if any((attr.classvar, attr.lazy, attr.skip)):
+            if any((attr.classvar, attr.lazy)):
                 continue
 
-            # ▼ Create attr entry and its value
-            item = name
-            value = name
+            # ▼ Create attr __init__ argument entry string
+            entryStr = name
+            defaultStr = f"__attrs__['{name}'].default"
+
+            # ▼ Provide distinct references for mutable objects
+            if hasattr(attr.default, 'copy') and hasattr(attr.default.copy, '__call__'):
+                copyStr = '.copy()'
+            else:
+                copyStr = ''
 
             # ▼ Append type annotation, if provided
             if attr.type is not EMPTY_ANNOTATION:
-                item += ': ' + attr.type
+                entryStr += ': ' + attr.type
 
             # ▼ Append default value assignment, if provided
             if attr.default is not Null:
-                item += ' = ' + f"__attrs__['{name}'].default"
-                if hasattr(attr.default, 'copy') and hasattr(attr.default.copy, '__call__'):
-                    value += '.copy()'
+                entryStr += ' = ' + defaultStr
 
             # ▼ Add assignment to args or kwargs section
-            getattr(kwargs if attr.kw is not False else args, 'append')(item)
+            if not attr.skip:
+                getattr(kwargs if attr.kw is True else args, 'append')(entryStr)
 
+            # ▼ Add attr initializer statement
             if attr.const:
-                lines.append(f"self.{name}_slot = {value}")
+                lines.append(f"self.{name}_slot = {name}")
+            elif attr.skip is True:
+                if attr.default is not Null:
+                    lines.append(f'self.{name} = {defaultStr}{copyStr}')
             else:
-                lines.append(f'self.{name} = {value}')
+                lines.append(f'self.{name} = {name}{copyStr}')
 
         # ▼ Capture possible arguments for .init()
         args.append('*args')
@@ -540,7 +551,7 @@ class Classtools(type):  # CONSIDER: Classtools
         # ▼ Format and compile __init__ function
         globs = {'__attrs__': metacls.attrs}
         template = f"def __init__(self, {', '.join(args)}, {', '.join(kwargs)}):\n    " + '\n    '.join(lines)
-        log.debug('Generated __init__():\n'+template)
+        log.debug(f"Generated {metacls.clsname}.__init__():\n"+template)
         eval(compile(template, '<classtools generated init>', 'exec'), globs, clsdict)
 
     @classmethod
@@ -576,7 +587,7 @@ class Classtools(type):  # CONSIDER: Classtools
             name = attr.name
             # if not attr.classvar: continue ???
 
-            if attr.const is not False:
+            if attr.const is True:
                 if attr.classvar:
                     setattr(metacls, name, ConstDescriptor())
                 else:
