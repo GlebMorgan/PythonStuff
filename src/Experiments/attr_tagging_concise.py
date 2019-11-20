@@ -12,7 +12,7 @@ from orderedset import OrderedSet
 
 __options__ = 'tag', 'skip', 'const', 'lazy', 'kw'
 
-__all__ = 'attr', 'TAG', 'OPTIONS', *__options__
+__all__ = 'Classtools', 'Attr', 'attr', 'TAG', 'OPTIONS', *__options__
 
 log = Logger('Classtools')
 log.setLevel('DEBUG')
@@ -178,9 +178,11 @@ class AnnotationSpy(dict):
             return super().__setitem__(attrname, annotation)
 
         # ▼ Convert to Attr if not already
-        if isinstance(var, Attr): var.name = attrname
-        elif var is Ellipsis: var = Attr()
-        else: var = Attr(attrname, var)
+        if var is Ellipsis: var = Attr()
+        elif not isinstance(var, Attr): var = Attr(var)
+
+        # ▼ The only place attr name is being set
+        var.name = attrname
 
         # ▼ Put annotation on its place, skip ATTR_ANNOTATION
         if annotation == ATTR_ANNOTATION: annotation = EMPTY_ANNOTATION
@@ -249,16 +251,16 @@ class Attr:
 
     IGNORED = type("ATTR_IGNORE_MARKER", (), dict(__slots__=()))()
 
-    def __init__(self, varname=Null, value=Null, vartype=Null, **options):
-        self.name = varname
+    def __init__(self, value=Null, **options):
+        self.name = Null
         self.default = value
-        self.type = vartype
+        self.type = Null
         for name, value in options.items():
             setattr(self, name, value)
 
     def __str__(self):
         return (
-            f"{'Class'*(self.classvar)}Attr '{self.name}'"
+            f"{'Class'*(self.classvar)}Attr '{self.name or '<Unknown>'}'"
             + f" [{self.default}]"
             + f" <{self.type or ' '}>"
             + f' ⚑{self.tag}' * (self.tag is not None)
@@ -350,7 +352,7 @@ class Option:
             if target is Ellipsis:
                 target = Attr()
             if not isinstance(target, Attr):
-                target = Attr(value=target)
+                target = Attr(target)
             if hasattr(target, self.name):
                 raise ClasstoolsError(f"Duplicate option '{self.name}'; "
                                       f"was already set to {getattr(target, self.name)}")
@@ -556,7 +558,7 @@ class Classtools(type):  # CONSIDER: Classtools
                 getter = metacls.attrs[name].lazy
                 if getter is not False:
                     try:
-                        result = getattr(self, getter)()  # TESTME: recursion risk???
+                        result = getattr(self, getter)()
                     except GetterError:
                         if attr.default is Null:
                             raise ClasstoolsError(f"Failed to compute '{attr.name}' value, .default is not provided")
@@ -862,6 +864,7 @@ def test_concise_tagging_basic():
     try: A().d = 'will_fail'
     except AttributeError as e: print(f"Attempt to assign to const: {e}")
     else: print("Const descriptor does not work!")
+    print(f".f = {A().f}")
     print(f".g = {A().g}")
     print(f".k = {A().k}")
     print(f".m = {A().m}")
