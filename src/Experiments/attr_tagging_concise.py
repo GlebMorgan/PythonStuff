@@ -579,7 +579,13 @@ class Classtools(type):  # CONSIDER: Classtools
             attrTypeName = 'slot' if metacls.injectSlots else 'attribute'
             raise AttributeError(f"'{self.__class__.__name__}' object has no {attrTypeName} '{name}'")
 
-        clsdict['__getattr__'] = evalLazyAttrs
+        if '__getattr__' in clsdict:
+            def __getattr_combined__(self, name):
+                self.evalLazyAttrs(name)
+                return clsdict['__getattr__'](name)
+            clsdict['__getattr__'] = __getattr_combined__
+        else:
+            clsdict['__getattr__'] = evalLazyAttrs
 
     @classmethod
     def setupDescriptors(metacls, clsdict):
