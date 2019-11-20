@@ -730,30 +730,40 @@ class Section:
         TODO: Section docstring
     """
 
-    __slots__ = 'type'
+    __slots__ = ()
 
     owner = Classtools
-
-    def __init__(self, sectionType: str = None):
-        self.type = sectionType
 
     def __enter__(self): pass
 
     def __exit__(self, *args):
         self.owner.resetOptions()
 
-    def __call__(self, *args):
-        if self.type == 'tagger':
-            if len(args) != 1:
-                raise TypeError(f"Section '{self.type}' requires single argument: 'tag'")
-            self.owner.sectionOptions[tag.name] = args[0]
-        else: raise ClasstoolsError("Section does not support arguments")
+    def __getitem__(self, *args, **kwargs):
+        return self.__apply__(*args, **kwargs)
+
+    def __call__(self, *args, **kwargs):
+        return self.__apply__(*args, **kwargs)
+
+    def __apply__(self, *args, **kwargs):
+        raise NotImplementedError
+
+
+class OptionSection(Section):
+    def __apply__(self, **kwargs):
+        for name, value in kwargs.items():
+            if name not in __options__:
+                raise ClasstoolsError(f"Invalid option '{name}'")
+            self.owner.sectionOptions[name] = value
         return self
 
-    def __getitem__(self, *args):
-        return self.__call__(*args)
 
-    def __repr__(self): return auto_repr(self, self.type or '')
+class TagSection(Section):
+    def __apply__(self, *args):
+        if len(args) != 1:
+            raise TypeError(f"Section '{self.type}' requires single positional argument: 'tag'")
+        self.owner.sectionOptions[tag.name] = args[0]
+        return self
 
 
 def classtools(cls):
@@ -793,8 +803,8 @@ kw = Option('kw', flag=True)
 #     10) Is it needed to skip attr initialization with new option set in Classtools.__init_attrs__
 
 attr = 'attr'  # placeholder for empty annotation
-OPTIONS = Section()
-TAG = Section('tagger')
+OPTIONS = OptionSection()
+TAG = TagSection()
 
 
 
