@@ -483,6 +483,16 @@ class Classtools(type):  # CONSIDER: Classtools
         # ▼ Convert annotation spy to normal dict
         clsdict['__annotations__'] = dict(metacls.annotations)
 
+        del metacls.enabled
+        del metacls.sectionOptions
+        del metacls.addSlots
+        del metacls.addInit
+        del metacls.clsname
+        del metacls.clsdict
+        del metacls.tags
+        del metacls.attrs
+        del metacls.annotations
+
         return super().__new__(metacls, clsname, bases, clsdict)
 
     def __getitem__(cls, item):
