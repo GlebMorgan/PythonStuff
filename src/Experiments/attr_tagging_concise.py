@@ -501,25 +501,19 @@ class Classtools(type):  # CONSIDER: Classtools
 
         for name, attr in metacls.attrs.items():
 
-            # ▼ Skip classvars and attrs with incompatible options
-            if any((attr.classvar, attr.lazy)):
+            # Skip attrs that do not need initialization
+            if attr.classvar is True or attr.lazy is not False:
                 continue
 
             # ▼ Create attr __init__ argument entry string
             entryStr = name
             defaultStr = f"__attrs__['{name}'].default"
 
-            # ▼ Provide distinct references for mutable objects
-            if hasattr(attr.default, 'copy') and hasattr(attr.default.copy, '__call__'):
-                copyStr = '.copy()'
-            else:
-                copyStr = ''
+            # Append type annotation, if provided
+            if name in metacls.annotations:
+                entryStr += ': ' + metacls.annotations[name]
 
-            # ▼ Append type annotation, if provided
-            if attr.type is not EMPTY_ANNOTATION:
-                entryStr += ': ' + attr.type
-
-            # ▼ Append default value assignment, if provided
+            # Append default value assignment, if provided
             if attr.default is not Null:
                 entryStr += ' = ' + defaultStr
 
@@ -527,32 +521,40 @@ class Classtools(type):  # CONSIDER: Classtools
             if not attr.skip:
                 getattr(kwargs if attr.kw is True else args, 'append')(entryStr)
 
-            # ▼ Add attr initializer statement
-            if attr.const:
-                lines.append(f"self.{name}_slot = {name}")
-            elif attr.skip is True:
+            # Provide distinct references for mutable objects
+            if hasattr(attr.default, 'copy') and hasattr(attr.default.copy, '__call__'):
+                copyStr = '.copy()'
+            else:
+                copyStr = ''
+
+            # Add attr initializer statement
+            if attr.skip is True:
                 if attr.default is not Null:
                     lines.append(f'self.{name} = {defaultStr}{copyStr}')
+            elif attr.const:
+                lines.append(f"self.{name}_slot = {name}")
             else:
                 lines.append(f'self.{name} = {name}{copyStr}')
 
-        # ▼ Capture possible arguments for .init()
-        args.append('*args')
-        kwargs.append('**kwargs')
+        # Call .init(), if provided
+        try:
+            clsdict.get('init').__call__
+        except AttributeError:
+            if kwargs: args.append('*')
+            log.spam(f'init() is not provided')
+        else:
+            args.append('*args')
+            kwargs.append('**kwargs')
+            lines.append('self.init(*args, **kwargs)')
 
-        # ▼ Call .init(), if provided
-        try: clsdict.get('init').__call__
-        except AttributeError: log.spam(f'init() is not provided')
-        else: lines.append('self.init(*args, **kwargs)')
-
-        # ▼ Skip if nothing to init
+        # Skip if nothing to init
         if not lines: return
 
-        # ▼ Format and compile __init__ function
+        # Format and compile __init__ function
         globs = {'__attrs__': metacls.attrs}
         template = f"def __init__(self, {', '.join(args)}, {', '.join(kwargs)}):\n    " + '\n    '.join(lines)
         log.debug(f"Generated {metacls.clsname}.__init__():\n"+template)
-        eval(compile(template, '<classtools generated init>', 'exec'), globs, clsdict)
+        eval(compile(template, '<classtools generated __init__>', 'exec'), globs, clsdict)
 
     @classmethod
     def injectGetattr(metacls, clsdict):
