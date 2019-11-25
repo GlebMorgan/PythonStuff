@@ -585,33 +585,42 @@ class Classtools(type):  # CONSIDER: Classtools
 
     @classmethod
     def injectGetattr(metacls, clsdict):
-        for attr in metacls.attrs.values():
-            if attr.lazy is not False:
-                try:
-                    clsdict.get(attr.lazy).__call__
-                except AttributeError:
-                    raise ClasstoolsError(f"Cannot find lazy evaluation method"
-                                          f"'{attr.lazy}' for attr '{attr.name}'")
 
+        # Define closure cache dict for future __getattr__ method
+        lazyAttrs = {name: attr.lazy for name, attr in metacls.attrs.items() if attr.lazy is not False}
+
+        # Skip injecting __getattr__ if no lazy attrs are present
+        if not lazyAttrs:
+            return
+
+        # Check all lazy attrs have their respective getters
+        for name, getter in lazyAttrs.items():
+            try:
+                clsdict.get(getter).__call__
+            except AttributeError:
+                raise ClasstoolsError(f"Cannot find lazy evaluation method "
+                                      f"'{getter}' for attr '{name}'")
+
+        # Generate future __getattr__ method
         def evalLazyAttrs(self, name):
-            if name in metacls.attrs.keys():
-                getter = metacls.attrs[name].lazy
-                if getter is not False:
-                    try:
-                        result = getattr(self, getter)()
-                    except GetterError:
-                        if attr.default is Null:
-                            raise ClasstoolsError(f"Failed to compute '{attr.name}' value, .default is not provided")
-                        result = attr.default
-                    setattr(self, name, result)
-                    return result
-            attrTypeName = 'slot' if metacls.injectSlots else 'attribute'
-            raise AttributeError(f"'{self.__class__.__name__}' object has no {attrTypeName} '{name}'")
+            if name in lazyAttrs:
+                try:
+                    result = getattr(self, lazyAttrs[name])()
+                except GetterError:
+                    result = self.__attrs__[name].default
+                    if result is Null:
+                        raise ClasstoolsError(f"Failed to compute '{name}' value, "
+                                              f".default is not provided")
+                setattr(self, name, result)
+                return result
+            # Will definitely fail, but with standard error message
+            return getattr(super(self.__class__, self), name)
 
+        # Fuse with existing __getattr__ method, if defined
         if '__getattr__' in clsdict:
-            def __getattr_combined__(self, name):
-                self.evalLazyAttrs(name)
-                return clsdict['__getattr__'](name)
+            def __getattr_combined__(self, item):
+                self.evalLazyAttrs(item)
+                return clsdict['__getattr__'](item)
             clsdict['__getattr__'] = __getattr_combined__
         else:
             clsdict['__getattr__'] = evalLazyAttrs
