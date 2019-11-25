@@ -515,6 +515,8 @@ class Classtools(type):  # CONSIDER: Classtools
 
     @classmethod
     def injectInit(metacls, clsdict):
+
+        metDefaultAttr = False
         args = []
         kwargs = []
         lines = []
@@ -535,9 +537,14 @@ class Classtools(type):  # CONSIDER: Classtools
 
             # Append default value assignment, if provided
             if attr.default is not Null:
+                metDefaultAttr = True
                 entryStr += ' = ' + defaultStr
 
-            # ▼ Add assignment to args or kwargs section
+            # Provide more accurate error if non-default argument appears after default one
+            elif attr.kw is False and metDefaultAttr is True:
+                raise ClasstoolsError(f"Non-default attr '{name}' is found after one with default")
+
+            # Add assignment to args or kwargs section
             if not attr.skip:
                 getattr(kwargs if attr.kw is True else args, 'append')(entryStr)
 
