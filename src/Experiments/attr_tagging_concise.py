@@ -455,12 +455,8 @@ class Classtools(type):  # CONSIDER: Classtools
                     raise ClasstoolsError(f"Classtools is configured to deny "
                                           f"'{value.__class__.__name__}' objects in user classes")
 
-        # ▼ Check for cls.init() argument names and attr names conflicts
-        # CONSIDER: do I actually need this check?
-        # if 'init' in clsdict and isinstance(clsdict['init'], Callable):
-        #     if any(varname in metacls.attrs for varname in clsdict['init'].__code__.co_varnames):
-        #         raise ClasstoolsError(f"{clsname}.init() argument names "
-        #                               f"conflict with {clsname} attr names")
+        # Check options compatibility
+        metacls.verifyOptions()
 
         # ▼ Inject slots from all non-classvar attrs, if configured accordingly
         if metacls.slots:
@@ -480,6 +476,22 @@ class Classtools(type):  # CONSIDER: Classtools
         clsdict['__annotations__'] = dict(metacls.annotations)
 
         return super().__new__(metacls, clsname, bases, clsdict)
+
+    def __getitem__(cls, item):
+        return cls.__attrs__[item]
+
+    @classmethod
+    def verifyOptions(metacls):
+        for name, attr in metacls.attrs.items():
+            if attr.classvar:
+                errorOptions = tuple(option.name for option in (const, lazy, kw, skip)
+                                if attr.options[option.name] is not False)
+                if errorOptions:
+                    raise ClasstoolsError(f"ClassAttr '{name}' has incompatible options: "
+                                          + ', '.join((f'|{option}' for option in errorOptions)))
+            if attr.kw and attr.skip:
+                # TODO: make this options combination to create attr only if it is provided in constructor arguments
+                raise ClasstoolsError("Attr cannot have both '|skip' and '|kw' options set")
 
     @classmethod
     def injectSlots(metacls, clsdict):
