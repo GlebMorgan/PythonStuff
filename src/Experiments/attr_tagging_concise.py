@@ -317,7 +317,7 @@ class Option:
 
     def __rtruediv__(self, other):
         # NOTE: disabling an option with assigned argument will reset it
-        super().__setattr__('value', False)
+        super().__setattr__('value', False if self.flag is True else self.default)
         return self.__apply__(other)
 
     def __call__(self, arg):
