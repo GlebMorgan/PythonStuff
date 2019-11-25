@@ -592,14 +592,8 @@ class Classtools(type):  # CONSIDER: Classtools
     @classmethod
     def setupDescriptors(metacls, clsdict):
         for attr in metacls.attrs.values():
-            name = attr.name
-            # if not attr.classvar: continue ???
-
             if attr.const is True:
-                if attr.classvar:
-                    setattr(metacls, name, ConstDescriptor())
-                else:
-                    clsdict[name] = ConstDescriptor()
+                clsdict[attr.name] = ConstDescriptor(attr.name)
 
     @legacy
     def __init_attrs__(owner, *a, **kw):
@@ -701,23 +695,20 @@ class Classtools(type):  # CONSIDER: Classtools
 class ConstDescriptor:
     __slots__ = 'name', 'slot'
 
-    def __set_name__(self, owner, name):
-        self.name = name
-        self.slot = getattr(owner, f'{name}_slot')
+    def __init__(self, name):
+        self.name = f'{name}_slot'
 
     def __get__(self, instance, owner):
-        # ▼ Access descriptor itself from class
+        # Access descriptor itself from class
         if instance is None: return self
-        return self.slot.__get__(instance, owner)
+        return getattr(instance, self.name)
 
     def __set__(self, instance, value):
-        try:
-            self.slot.__get__(instance, type(instance))
-        except AttributeError:
-            self.slot = value
-        else:
-            raise AttributeError(f"Attr '{self.name}' is declared constant")
+        if hasattr(instance, self.name):
+            raise AttributeError(f"Attr '{self.name.rstrip('_slot')}' is declared constant")
             # CONSIDER: when using __slots__, this msg is not printed --► need to make unified?
+        else:
+            setattr(instance, self.name, value)
 
 
 # class LazyConstDescriptor:
