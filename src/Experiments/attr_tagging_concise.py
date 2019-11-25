@@ -205,17 +205,7 @@ class AnnotationSpy(dict):
         # ▼ Set .type with removed 'ClassVar[...]' and 'attr'
         var.type = annotation
 
-        if var.default is Null or (var.classvar is False and (self.owner.slots or not STORE_DEFAULTS)):
-            if attrname in clsdict: del clsdict[attrname]
-        else:
-            clsdict[attrname] = var.default
-
-        # NOTE: Alternative version
-        # if var.default is Null
-        # or self.owner.slots and var.classvar is False
-        # or not STORE_DEFAULTS and var.classvar is False:
-
-        # ▼ Set options which was not defined earlier by option definition objects / Attr kwargs
+        # Set options which was not defined earlier by option definition objects / Attr kwargs
         for option in (__options__):
             if not hasattr(var, option):
                 setattr(var, option, self.owner.sectionOptions[option])
@@ -431,7 +421,20 @@ class Classtools(type):  # CONSIDER: Classtools
         if metacls.enabled is False:
             return super().__new__(metacls, clsname, bases, clsdict)
 
-        # ▼ Use tags and attrs that are already in clsdict if no parents found
+        # Cleanup class __dict__
+        for name, attr in metacls.attrs.items():
+            if attr.default is Null or (attr.classvar is False and (metacls.addSlots or not STORE_DEFAULTS)):
+                if name in clsdict: del clsdict[name]
+            else:
+                clsdict[name] = attr.default
+
+        # NOTE: Alternative version
+        # if attr.default is Null
+        # or self.owner.slots and attr.classvar is False
+        # or not STORE_DEFAULTS and attr.classvar is False:
+
+        # Use tags and attrs that are already in clsdict if no parents found
+        # CONSIDER: why do I need first condition here???
         if hasattr(metacls, 'clsdict') and bases:
             clsdict['__tags__'] = metacls.mergeTags(bases, metacls.tags)
             clsdict['__attrs__'] = metacls.mergeParentDicts(bases, '__attrs__', metacls.attrs)
