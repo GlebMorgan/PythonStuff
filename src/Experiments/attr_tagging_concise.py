@@ -272,35 +272,21 @@ class Attr:
 
 
 class Option:
-    """
-        |option       – enable option (or set value to default) (if supported)
-        |option(arg)  – set option value to arg (if supported)
-        |-option      – disable option (or set value to None)
-
-        • default - option notset value)
-        • flag - option type:
-            flag=True  – option is True/False only, no parameters are accepted               - True|False
-            flag=False – option stores a value, that must be provided as an argument         - arg|False
-            flag=None  – option stores a value, but argument could be omitted (uses default) - True|False|arg
-        ... TODO: Option docstring
+    """ TODO: Option docstring
+        Syntax:
+            |option       – enable option (if supported)
+            |option(arg)  – set option value to arg (if supported)
+            /option       – disable option (or reset value to default)
+        Arguments:
+            • default - option notset value
+            • flag - option type:
+                flag=True  – option is True/False only, no parameters are accepted               - True|False
+                flag=False – option stores a value, that must be provided as an argument         - arg|default
+                flag=None  – option stores a value, but argument could be omitted (uses default) - True|False|arg
     """
 
     __slots__ = 'name', 'default', 'value', 'flag'
 
-    @legacy
-    class setupMode:
-        """ Decorator that allows __setattr__ inside the decorated method """
-        def __init__(self, method):
-            self.method = method
-        def __get__(self, instance, owner):
-            self.instance = instance
-            return self
-        def __call__(self, *args, **kwargs):
-            self.instance.__class__.__setattr__ = super(self.instance.__class__, self.instance).__class__.__setattr__
-            self.method(self.instance, *args, **kwargs)
-            self.instance.__class__.__setattr__ = self.instance.__class__.denyAttrAccess
-
-    # @setupMode
     def __init__(self, name, *, default: Any = False, flag: Union[bool, None]):
         super().__setattr__('name', name)
         super().__setattr__('default', default)
@@ -311,7 +297,7 @@ class Option:
     def __ror__(self, other):
         if not hasattr(self, 'value'):
             if self.flag is False:
-                raise ClasstoolsError(f"Option '{self.name}' requires an argument")
+                raise ClasstoolsError(f"Option '|{self.name}' requires an argument")
             super().__setattr__('value', True)
         return self.__apply__(other)
 
@@ -322,7 +308,7 @@ class Option:
 
     def __call__(self, arg):
         if self.flag is True:
-            raise ClasstoolsError(f"Option '{self.name}' is not callable")
+            raise ClasstoolsError(f"Option '|{self.name}' takes no arguments")
         option = self.__class__(self.name, default=self.default, flag=self.flag)
         super(type(option), option).__setattr__('value', arg)
         return option
@@ -344,8 +330,8 @@ class Option:
             if not isinstance(target, Attr):
                 target = Attr(target)
             if hasattr(target, self.name):
-                raise ClasstoolsError(f"Duplicate option '{self.name}'; "
-                                      f"was already set to {getattr(target, self.name)}")
+                raise ClasstoolsError(f"Duplicate option '|{self.name}' - "
+                                      f"was already set to '{getattr(target, self.name)}'")
             setattr(target, self.name, self.value)
 
         del self.value
@@ -354,9 +340,10 @@ class Option:
     def __repr__(self): return auto_repr(self, self.name)
 
     def denyAttrAccess(self, name, value):
-        raise AttributeError(f"'{self.name}' object is not intended to use beyond documented syntax")
+        raise AttributeError(f"'{self.name}' object is not intended to be used beyond documented syntax")
 
     __setattr__ = denyAttrAccess
+
 
 class Classtools(type):  # CONSIDER: Classtools
     """ TODO: Classtools docstring
@@ -641,31 +628,6 @@ class Classtools(type):  # CONSIDER: Classtools
             if attr.const is True:
                 clsdict[attr.name] = ConstDescriptor(attr.name)
 
-    @legacy
-    def __init_attrs__(owner, *a, **kw):
-        """ This is gonna be new class's __init__ method """
-
-        log.debug(f"__init_attrs__: self={owner.__class__.__name__}, args={a}, kwargs={kw}")
-
-        for name, attr in owner.__attrs__.items():
-
-            # ▼ Skip classvars and attrs with incompatible options
-            if any((attr.classvar, attr.lazy, attr.skip)): continue
-            # TESTME: ▲ Test this and all the rest
-
-            # ▼ Get attr value from arguments or .default
-            try:
-                value = kw.pop(name)
-            except KeyError:
-                try:
-                    value = attr.default.copy()
-                except AttributeError:
-                    value = attr.default
-
-            setattr(owner, name, value)
-
-        # ▼ TODO: handle arguments-related errors here
-        if hasattr(owner, 'init'): owner.init(*a, **kw)
 
     @staticmethod
     def mergeTags(parents, currentTags):
@@ -701,43 +663,6 @@ class Classtools(type):  # CONSIDER: Classtools
                 {option.name: option.default for option in (tag, skip, const, lazy, kw)})
 
 
-# class LazyDescriptor:
-#     """
-#         TODO: Descriptors docstrings
-#         If getter raises GetterError, default is returned (on current attr access)
-#     """
-#
-#     __slots__ = 'name', 'values', 'default', 'getter'
-#
-#     def __init__(self, default, getter):
-#         self.default = default
-#         self.getter: str = getter
-#         self.values: dict = {}
-#
-#     def __set_name__(self, owner, name):
-#         self.name = name
-#
-#     def __get__(self, instance, owner):
-#         # ▼ Access descriptor itself from class
-#         if instance is None: return self
-#
-#         try:
-#             return self.values[instance]
-#         except KeyError:
-#             try:
-#                 self.values[instance] = getattr(instance, self.getter)()
-#             except GetterError:
-#                 if self.default is Null:
-#                     raise ClasstoolsError(f"Failed to compute '{self.name}' value, .default is not provided")
-#                 self.values[instance] = self.default
-#             return self.values[instance]
-#
-#     def __set__(self, instance, value):
-#         self.values[instance] = value
-#
-#     # CONSIDER: __delete__ — ?
-
-
 class ConstDescriptor:
     __slots__ = 'name', 'slot'
 
@@ -755,13 +680,6 @@ class ConstDescriptor:
             # CONSIDER: when using __slots__, this msg is not printed --► need to make unified?
         else:
             setattr(instance, self.name, value)
-
-
-# class LazyConstDescriptor:
-#     __slots__ = LazyDescriptor.__slots__
-#     __init__ = LazyDescriptor.__init__
-#     __get__ = LazyDescriptor.__get__
-#     __set__ = ConstDescriptor.__set__
 
 
 class Section:
