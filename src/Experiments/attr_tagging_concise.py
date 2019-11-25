@@ -781,7 +781,7 @@ class OptionSection(Section):
 class TagSection(Section):
     def __apply__(self, *args):
         if len(args) != 1:
-            raise TypeError(f"Section '{self.type}' requires single positional argument: 'tag'")
+            raise TypeError(f"{self.__class__.__name__} requires single positional argument 'tag'")
         self.owner.sectionOptions[tag.name] = args[0]
         return self
 
