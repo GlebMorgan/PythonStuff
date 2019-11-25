@@ -152,8 +152,8 @@ class AnnotationSpy(dict):
         super().__init__()
 
     def __setitem__(self, attrname, annotation):
-        # ▼ Value is readily Null, if autoInit is disabled
-        default = self.owner.autoInit
+        # Value is readily Null, if attrs auto-initialization is disabled
+        default = self.owner.attrsDefault
 
         clsdict = self.owner.clsdict
 
@@ -385,19 +385,23 @@ class Classtools(type):  # CONSIDER: Classtools
     enabled: bool
 
     sectionOptions: Dict[str, Any]
+    addSlots: bool
+    addInit: bool
+
+    clsname: str
     clsdict: Dict[str, Any]
     tags: DefaultDict[str, OrderedSet]
     attrs: Dict[str, Attr]
     annotations: Dict[str, str]
 
     @classmethod
-    def __prepare__(metacls, clsname, bases, enable=True, slots=False, autoinit=Null):
+    def __prepare__(metacls, clsname, bases, enable=True, slots=False, init=True, initattrs=Null):
 
         metacls.enabled = enable
         if enable is False: return {}
 
-        metacls.slots = slots
-        metacls.autoInit = autoinit
+        metacls.attrsDefault = initattrs
+        metacls.addSlots = slots
         metacls.addInit = init
 
         metacls.clsname = clsname
@@ -459,8 +463,8 @@ class Classtools(type):  # CONSIDER: Classtools
         # Check options compatibility
         metacls.verifyOptions()
 
-        # ▼ Inject slots from all non-classvar attrs, if configured accordingly
-        if metacls.slots:
+        # Inject slots from all non-classvar attrs, if configured accordingly
+        if metacls.addSlots is True:
             metacls.injectSlots(clsdict)
 
         # ▼ Configure attr descriptors based on options being set
