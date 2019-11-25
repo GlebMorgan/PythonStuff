@@ -37,11 +37,11 @@ log.setLevel('DEBUG')
 
 # TODO: Document all this stuff!
 
-# TODO: Init injection disabling option
+# ✓ Init injection disabling option
 
 # TODO: Metaclass options setting through same |option syntax
 
-# TODO: Change |lazy descriptor logic to this:
+# ✗ Change |lazy descriptor logic to this:
 #           class SNPTest:
 #               ''' Same name property test '''
 #               @property
@@ -63,7 +63,7 @@ log.setLevel('DEBUG')
 
 # ✓ Factory option: is it needed? ——► stick with searching for .copy attr
 
-# CONSIDER: Rename __tags__ ——► _tags_ (may break some dunder checks, needs investigation)
+# ✗ Rename __tags__ ——► _tags_ (may break some dunder checks, needs investigation)
 
 # CONSIDER: Create a __owner__ variable in metaclass referencing to outer class, in which current class is defined;
 #           this way inner classes and variables may be visible in child class, which is always very convenient
@@ -71,12 +71,13 @@ log.setLevel('DEBUG')
 # CONSIDER: Implement lookups diving into mro classes when searching for __tags__ and __attrs__ to initialize slots
 #           just like normal attrs lookup is performed instead of creating cumulative dicts in each class
 
-# CONSIDER: metaclass options are accessible from instance class — eliminate this somehow
+# ✓ Metaclass options are accessible from instance class — eliminate this somehow
 
-# ▼ CONSIDER: check non-annotated attrs not only for being Attr instances, but for all other service Classtools classes
-#             (may use kind of AbcMeta here for isinstance check): here + non-annotated attrs check
+# CONSIDER: Check non-annotated attrs not only for being Attr instances, but for all other service Classtools classes
+#           (may use kind of AbcMeta here for isinstance check): here + non-annotated attrs check
 
-# CONSIDER: add pre-check for 'non-default argument follows default argument' situation
+# CONSIDER: Add to __init__ only those args that are required for .init()
+#           initSig = signature(clsdict['init']) ... bla bla bla
 
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 
@@ -86,27 +87,27 @@ log.setLevel('DEBUG')
 ATTR_ANNOTATION = 'attr'
 EMPTY_ANNOTATION = ''
 
-# ▼ Allow usage of ATTR_ANNOTATION marker in type annotations (+ inside generic structures e.g. ClassVar[attr])
+# Allow usage of ATTR_ANNOTATION marker in type annotations (+ inside generic structures e.g. ClassVar[attr])
 ALLOW_ATTR_ANNOTATIONS = False
 
-# ▼ Allow __dunder__ names to be processed by Classtools machinery and be annotated with ATTR_ANNOTATION
+# Allow __dunder__ names to be processed by Classtools machinery and be annotated with ATTR_ANNOTATION
 ALLOW_DUNDER_ATTRS = False
 
-# ▼ Create class variable for each attr with default value assigned
+# Create class variable for each attr with default value assigned
 #   Else, instance variable will be assigned with its default only if Classtools |autoinit option is set
 #   Note: Classtools |slots option overrides STORE_DEFAULTS config option as slots injection will cause name collisions
 STORE_DEFAULTS = True
 
-# ▼ Add Attr option definition objects (those used with '|option' syntax) to created class's dict
+# Add Attr option definition objects (those used with '|option' syntax) to created class's dict
 #   It will make their names available (only) inside class body, thus avoiding extra imports
 #   These objects will be removed from class dict as soon as class statement is fully executed
 INJECT_OPTIONS = False
 
-# TODO: comment to 'ALLOW_SERVICE_OBJECTS'
+# Allow Classtools service objects (Option, Section, etc.) to exist inside class as class variables or attrs defaults
 ALLOW_SERVICE_OBJECTS = False
 
 # NOTE: Option is not used — always denying non-annotated Attr()s for now
-# ▼ Allow non-function attr is declared without annotation.
+# Allow non-function attr is declared without annotation.
 #   Else — treat non-annotated attrs as class attrs (do not process them with class tools routine)
 ALLOW_BARE_ATTRS = True
 
@@ -157,19 +158,19 @@ class AnnotationSpy(dict):
 
         clsdict = self.owner.clsdict
 
-        # ▼ Get assigned value or default
+        # Get assigned value or default
         var = clsdict.get(attrname, default)
 
-        # ▼ Deny non-string annotations
+        # Deny non-string annotations
         if not isinstance(annotation, str):
             raise ClasstoolsError(f"Attr '{attrname}' - annotation must be a string. "
                                   f"Use quotes or 'from __future__ import annotations'")
 
-        # ▼ Skip dunder attrs, if configured accordingly
+        # Skip dunder attrs, if configured accordingly
         if not ALLOW_DUNDER_ATTRS and isDunder(attrname):
             return super().__setitem__(attrname, annotation)
 
-        # ▼ Skip and remove ignored attrs from class dict
+        # Skip and remove ignored attrs from class dict
         if var is Attr.IGNORED:
             if annotation == ATTR_ANNOTATION:
                 raise ClasstoolsError(f"Attr '{attrname}' - cannot use '{ATTR_ANNOTATION}' "
@@ -177,19 +178,19 @@ class AnnotationSpy(dict):
             del clsdict[attrname]
             return super().__setitem__(attrname, annotation)
 
-        # ▼ Convert to Attr if not already
+        # Convert to Attr if not already
         if var is Ellipsis: var = Attr()
         elif not isinstance(var, Attr): var = Attr(var)
 
-        # ▼ The only place attr name is being set
+        # The only place attr name is being set
         var.name = attrname
 
-        # ▼ Put annotation on its place, skip ATTR_ANNOTATION
+        # Put annotation on its place, skip ATTR_ANNOTATION
         if annotation == ATTR_ANNOTATION: annotation = EMPTY_ANNOTATION
         else: super().__setitem__(attrname, annotation)
 
-        # CONSIDER: ▼ Parse generic annotations correctly (use re, dedicated module or smth)
-        # ▼ Set attr as classvar and strip annotation, if that's the case
+        # CONSIDER: Parse generic annotations correctly (use re, dedicated module or smth)
+        # Set attr as classvar and strip annotation, if that's the case
         if annotation.startswith('ClassVar'):
             var.classvar = True
             annotation = annotation.strip('ClassVar')
@@ -202,7 +203,7 @@ class AnnotationSpy(dict):
         else:
             var.classvar = False
 
-        # ▼ Set .type with removed 'ClassVar[...]' and 'attr'
+        # Set .type with removed 'ClassVar[...]' and 'attr'
         var.type = annotation
 
         # Set options which was not defined earlier by option definition objects / Attr kwargs
@@ -236,7 +237,7 @@ class Attr:
             🕓         lazy
     """
 
-    # ▼ ' ... , *__options__' is not used here because PyCharm fails to resolve attributes this way round
+    # ' ... , *__options__' is not used here because PyCharm fails to resolve attributes this way round
     __slots__ = 'name', 'default', 'type', 'classvar', 'tag', 'skip', 'const', 'lazy', 'kw'
 
     IGNORED = type("ATTR_IGNORE_MARKER", (), dict(__slots__=()))()
@@ -315,15 +316,15 @@ class Option:
 
     def __apply__(self, target):
 
-        # ▼ Skip ignored attrs
+        # Skip ignored attrs
         if target is Attr.IGNORED:
             return target
 
-        # ▼ If applied to Section, change section-common defaults via Section.classdict
+        # If applied to Section, change section-common defaults via Section.classdict
         if isinstance(target, Section):
             target.owner.sectionOptions[self.name] = self.value
 
-        # ▼ Else, convert 'target' to Attr() and apply option to it
+        # Else, convert 'target' to Attr() and apply option to it
         else:
             if target is Ellipsis:
                 target = Attr()
@@ -352,6 +353,7 @@ class Classtools(type):  # CONSIDER: Classtools
         Tag names are case-insensitive
         Member methods (class is direct parent in __qualname__) are not tagged,
             even if they are assigned not using 'def'
+        Supports `ClassName['attr']` syntax for accessing attr objects
         • slots ——► auto inject slots from __attrs__
         • init ——► auto-initialize all __attrs__ defaults to 'None'
     """
@@ -389,11 +391,11 @@ class Classtools(type):  # CONSIDER: Classtools
 
         metacls.sectionOptions: Dict[str, Any] = {}
 
-        # ▼ Initialize options
+        # Initialize options
         metacls.resetOptions()
 
         if INJECT_OPTIONS:  # TESTME
-            # ▼ CONSIDER: adjustable names below
+            # CONSIDER: adjustable names below
             metacls.clsdict['attr'] = attr
             metacls.clsdict['tag'] = tag
             metacls.clsdict['skip'] = skip
@@ -426,24 +428,21 @@ class Classtools(type):  # CONSIDER: Classtools
             clsdict['__tags__'] = metacls.mergeTags(bases, metacls.tags)
             clsdict['__attrs__'] = metacls.mergeParentDicts(bases, '__attrs__', metacls.attrs)
 
-        # ▼ Deny explicit/implicit Attr()s assignments to non-annotated variables
+        # Deny explicit/implicit Attr()s assignments to non-annotated variables
         for attrname, value in clsdict.items():
             if isinstance(value, Attr):
                 raise ClasstoolsError(f"Attr '{attrname}' is used without type annotation!")
             if isinstance(value, Attr.IGNORED.__class__):
                 raise ClasstoolsError(f"Attr.IGNORED marker could be used only with annotated variables")
 
-        # ▼ Deny ATTR_ANNOTATION in annotations and generic structures, if configured accordingly
+        # Deny ATTR_ANNOTATION in annotations and generic structures, if configured accordingly
         if not ALLOW_ATTR_ANNOTATIONS:
-            # CONSIDER: if this ▼ additional check needed here?
-            if ATTR_ANNOTATION in metacls.annotations:
-                raise ClasstoolsError(f"Classtools is configured to deny '{ATTR_ANNOTATION}' annotations")
             for attrname, annotation in metacls.annotations.items():
                 if len(findall(rf'\W({ATTR_ANNOTATION})\W', annotation)) > 0:
                     raise ClasstoolsError(f"Attr '{attrname}: {annotation}' - Classtools is configured to deny "
                                           f"'{ATTR_ANNOTATION}' annotations inside generic structures")
 
-        # ▼ Deny Classtools service objects assignments to class variables or attrs, if configured accordingly
+        # Deny Classtools service objects assignments to class variables or attrs, if configured accordingly
         if not ALLOW_SERVICE_OBJECTS:
             for value in chain(clsdict.values(), (attrobj.default for attrobj in metacls.attrs.values())):
                 if isinstance(value, (Section, Option)):
@@ -457,17 +456,17 @@ class Classtools(type):  # CONSIDER: Classtools
         if metacls.addSlots is True:
             metacls.injectSlots(clsdict)
 
-        # ▼ Configure attr descriptors based on options being set
+        # Configure attr descriptors based on options being set
         metacls.setupDescriptors(clsdict)
 
         # Generate __init__() function, 'init()' is used to further initialize object
         if metacls.addInit is True:
             metacls.injectInit(clsdict)
 
-        # ▼ Generate __getattr__ function handling first access to lazy evaluated attrs
+        # Generate __getattr__ function handling first access to lazy evaluated attrs
         metacls.injectGetattr(clsdict)
 
-        # ▼ Convert annotation spy to normal dict
+        # Convert annotation spy to normal dict
         clsdict['__annotations__'] = dict(metacls.annotations)
 
         del metacls.enabled
@@ -524,7 +523,7 @@ class Classtools(type):  # CONSIDER: Classtools
             if attr.classvar is True or attr.lazy is not False:
                 continue
 
-            # ▼ Create attr __init__ argument entry string
+            # Create __init__ argument entry string of the form <attrname>: <annotation> = <default>
             entryStr = name
             defaultStr = f"__attrs__['{name}'].default"
 
@@ -631,16 +630,16 @@ class Classtools(type):  # CONSIDER: Classtools
 
     @staticmethod
     def mergeTags(parents, currentTags):
-        # ▼ Collect all base class tags dicts + current class tags dict
+        # Collect all base class tags dicts + current class tags dict
         tagsDicts = attachItem(filter(None, (parent.__dict__.get('__tags__') for parent in parents)), currentTags)
 
-        # ▼ Take main parent's tags as base tags dict
+        # Take main parent's tags as base tags dict
         try: newTags = tagsDicts.__next__().copy()
 
-        # ▼ Use current tags if no single parent defines any
+        # Use current tags if no single parent defines any
         except StopIteration: return currentTags
 
-        # ▼ Merge all tags by tag name into 'newTags'
+        # Merge all tags by tag name into 'newTags'
         for tagsDict in tagsDicts:
             reduceItems = ((tagname, newTags[tagname] | namesSet) for tagname, namesSet in tagsDict.items())
             for _ in starmap(partial(setitem, newTags), reduceItems): pass
@@ -759,14 +758,12 @@ kw = Option('kw', flag=True)
 #        to __slots__ in Classtools.__new__
 #     10) Is it needed to skip attr initialization with new option set in Classtools.__init_attrs__
 
-attr = 'attr'  # placeholder for empty annotation
+attr = ATTR_ANNOTATION  # placeholder for empty annotation
 OPTIONS = OptionSection()
 TAG = TagSection()
 
 
-
-
-
+# ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 
 
 def test_pickle():
@@ -820,7 +817,7 @@ def test_concise_tagging_basic():
 
         with TAG['tag'] |skip:
             b: str = 'loool' /skip
-            d: ClassVar[int] = 0 |const
+            d: ClassVar[int] = 0 |kw
             g: ClassVar[int] = 42 |tag(None)
             k: ClassVar[str] = 'clsvar'
 
