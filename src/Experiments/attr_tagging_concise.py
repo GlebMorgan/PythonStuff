@@ -398,6 +398,7 @@ class Classtools(type):  # CONSIDER: Classtools
 
         metacls.slots = slots
         metacls.autoInit = autoinit
+        metacls.addInit = init
 
         metacls.clsname = clsname
         metacls.clsdict = {}
@@ -465,9 +466,9 @@ class Classtools(type):  # CONSIDER: Classtools
         # ▼ Configure attr descriptors based on options being set
         metacls.setupDescriptors(clsdict)
 
-        # ▼ Generate __init__() function, 'init()' is used to further initialize object
-        # clsdict['__init__'] = metacls.__init_attrs__
-        metacls.injectInit(clsdict)
+        # Generate __init__() function, 'init()' is used to further initialize object
+        if metacls.addInit is True:
+            metacls.injectInit(clsdict)
 
         # ▼ Generate __getattr__ function handling first access to lazy evaluated attrs
         metacls.injectGetattr(clsdict)
