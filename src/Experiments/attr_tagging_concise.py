@@ -310,9 +310,10 @@ class Option:
     __slots__ = 'name', 'default', 'value', 'flag'
 
     def __init__(self, name, *, default: Any = False, flag: Union[bool, None]):
-        super().__setattr__('name', name)
-        super().__setattr__('default', default)
-        super().__setattr__('flag', flag)
+        assign = super().__setattr__
+        assign('name', name)
+        assign('default', default)
+        assign('flag', flag)
         # for attr in ('name', 'default', 'flag', 'init'):
         #     super().__setattr__(attr, locals()[attr])
 
@@ -361,10 +362,8 @@ class Option:
 
     def __repr__(self): return auto_repr(self, self.name)
 
-    def denyAttrAccess(self, name, value):
+    def __setattr__(self, name, value):
         raise AttributeError(f"'{self.name}' object is not intended to be used beyond documented syntax")
-
-    __setattr__ = denyAttrAccess
 
 
 class Classtools(type):  # CONSIDER: Classtools
