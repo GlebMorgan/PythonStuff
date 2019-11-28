@@ -21,7 +21,7 @@ log.setLevel('DEBUG')
 
 # FIXME: pickle does not work
 
-# FIXME: options state is saved until ror is called, no control over isolated option config and its application to attr
+# ✓ options state is saved until ror is called, no control over isolated option config and its application to attr
 
 # —————————————————————————————————————————————————————— TODOs ——————————————————————————————————————————————————————— #
 
@@ -57,7 +57,12 @@ log.setLevel('DEBUG')
 
 # TODO: remove OrderedSet dependency
 
-# TODO: add |type option to check types
+# TODO: add |type option to check types (including nested cases like Union[Tuple[str, ...], Tuple[bytes, ...]]
+
+# TODO: define type Unions as [type1, type2, ..., typeN]
+
+# TODO: EVALUATE_TYPES global option - triggers annotation evaluation
+#       (attr.type returns _typespec_ or just annotation string)
 
 # ———————————————————————————————————————————————————— ToCONSIDER ———————————————————————————————————————————————————— #
 
@@ -73,7 +78,7 @@ log.setLevel('DEBUG')
 
 # ✓ Metaclass options are accessible from instance class — eliminate this somehow
 
-# CONSIDER: Check non-annotated attrs not only for being Attr instances, but for all other service Classtools classes
+# ✓ Check non-annotated attrs not only for being Attr instances, but for all other service Classtools classes
 #           (may use kind of AbcMeta here for isinstance check): here + non-annotated attrs check
 
 # CONSIDER: Add to __init__ only those args that are required for .init()
@@ -123,15 +128,15 @@ class GetterError(RuntimeError):
 class AnnotationSpy(dict):
     """
         Dict-like class that intercepts annotation assignments and processes all
-            newly defined annotated class variables with __attrs__ creation machinery
+            newly defined *annotated* class variables with __attrs__ creation machinery
 
         General conceptual mechanics of adding new attr to class:
             • Variable value is converted to Attr(), if not already
-            • If fallback default is provided via |autoinit option,
+            • If fallback default is provided via Classtools 'initattrs' option,
                 it is automatically assigned to attr.default
             • Considering that attr.default is provided, attr is stored in class dict if either:
                 • attr is annotated as ClassVar
-                • both Classtools |slots option is False and STORE_DEFAULTS config option is True
+                • both Classtools 'slots' option is False and STORE_DEFAULTS config option is True
             • Attr options that have not been set are assigned with their respective defaults
             • Attr is added to __tags__ and __slots__ dicts
 
@@ -139,11 +144,11 @@ class AnnotationSpy(dict):
             • If ALLOW_DUNDER_ATTRS config option is False,
                 dunder attrs are ignored (are left alone as class attrs)
             • Attr.IGNORED attrs are completely removed from class
-                as if they were only type-annotated names
-            • ClassVar annotation is not included into attr.type,
-                though annotations are left unchanged (except for ATTR_ANNOTATION)
+                (behave as if they were only type-annotated names)
+            • ClassVar annotation is excluded from attr.type string
             • If variable is annotated with ATTR_ANNOTATION,
                 variable is not added to annotations and attr.type is left empty
+            • Else, annotations are added to __annotations__ dict unchanged
             • Annotations must be strings, error is raised otherwise,
                 this encourages using 'from __future__ import annotations'
     """
