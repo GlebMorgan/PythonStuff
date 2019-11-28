@@ -5,14 +5,14 @@ from functools import partial
 from itertools import starmap, chain
 from operator import setitem
 from re import findall
-from typing import Any, ClassVar, Union, Dict, DefaultDict
+from typing import Any, ClassVar, Union, Dict, DefaultDict, Tuple, Optional
 
-from Utils import auto_repr, Null, Logger, attachItem, formatDict, isDunder, legacy
+from Utils import auto_repr, Null, Logger, attachItem, formatDict, isDunder
 from orderedset import OrderedSet
 
 __options__ = 'tag', 'skip', 'const', 'lazy', 'kw'
 
-__all__ = 'Classtools', 'Attr', 'attr', 'TAG', 'OPTIONS', *__options__
+__all__ = 'Null', 'Classtools', 'Attr', 'attr', 'TAG', 'OPTIONS', *__options__
 
 log = Logger('Classtools')
 log.setLevel('DEBUG')
@@ -470,7 +470,7 @@ class Classtools(type):  # CONSIDER: Classtools
         # Deny Classtools service objects assignments to class variables or attrs, if configured accordingly
         if not ALLOW_SERVICE_OBJECTS:
             for value in chain(clsdict.values(), (attrobj.default for attrobj in metacls.attrs.values())):
-                if isinstance(value, (Section, Option)):
+                if isinstance(value, (Attr, Section, Option)):
                     raise ClasstoolsError(f"Classtools is configured to deny "
                                           f"'{value.__class__.__name__}' objects in user classes")
 
