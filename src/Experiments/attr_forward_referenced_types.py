@@ -2,7 +2,8 @@ from __future__ import annotations as annotations_feature
 
 import typing
 from types import CodeType
-from typing import Union, Collection, Callable, ClassVar, Dict, Tuple, Type, Any, TypeVar, Generic, _Protocol
+from typing import Union, Optional, ClassVar, Any, TypeVar, Generic, _Protocol
+from typing import Collection, Callable, Dict, Tuple, List, Type, MutableMapping
 from typing import _GenericAlias as GenericAlias
 from typing import _SpecialForm as SpecialForm
 from typing import ForwardRef
@@ -175,8 +176,6 @@ class AttrTypeDescriptor:
 
         globs = globals()
         locs = vars(typing)  # TODO: evaluation scope
-
-        # TODO: define type Unions as [type1, type2, ..., typeN]
         try:
             typeval = eval(code, globs, locs)
             setattr(attr, self.annotationSlot, typeval)
@@ -285,21 +284,36 @@ def test_FRef():
 
     print("@")
 
+    print("\n\nTest forward references\n")
+
     with pytest.raises(NameError, match=re.escape("name 'Resolved' is not defined")):
         res = Attr('b', 'Resolved').type
+
+    with pytest.raises(NameError, match=re.escape("name 'Resolved' is not defined")):
+        res = Attr('b', 'Union["Resolved", Tuple["Resolved", ...]]').type
 
     class Resolved: pass
 
     globals()['Resolved'] = Resolved
 
     res = Attr('b', 'Resolved').type
-    assert res == Resolved
+    assert res == Resolved, res
 
-    with pytest.raises(RuntimeError, match=re.escape("Cannot evaluate annotation ' '")):
-        res = OldAttr('y', ' ').type
+    res = Attr('b', 'Union["Resolved", Tuple["Resolved", ...]]').type
+    assert set(res) == {tuple, Resolved}, set(res)
 
-    with pytest.raises(RuntimeError, match=re.escape("Cannot resolve type 'Error'")):
-        res = OldAttr('z', 'Error').type
+    with pytest.raises(SyntaxError, match=re.escape("unexpected EOF while parsing")):
+        res = Attr('y', ' ').type
+
+    with pytest.raises(NameError, match=re.escape("name 'Error' is not defined")):
+        res = Attr('z', 'Error').type
+
+    T = TypeVar('T')
+    TInt = TypeVar('TInt', bound=int)
+    TAny = TypeVar('TAny', bound=Any)
+    TColl = TypeVar('TColl', tuple, set, list)
+    K = TypeVar('K', bound=Union[Tuple[int, ...], List[int], None])
+    globals().update({typevar.__name__: typevar for typevar in (T, TInt, TColl, TAny, K)})
 
     types = {
         'Any': object,
@@ -308,7 +322,7 @@ def test_FRef():
         'Union[str, str, type("s")]': str,
         'Union[tuple]': tuple,
         'Union[str, list]': (list, str),
-        'Union[str, Any]': object,
+        'Union[str, int, "Resolved", Any]': object,
         'Union[Union[bool, int], str, int]': (bool, str, int),
         'Optional[str]': (type(None), str),
         'Callable': Callable.__origin__,
@@ -326,11 +340,77 @@ def test_FRef():
         'ClassVar[None]': type(None),
         'ClassVar[Union[Tuple[int, ...], Tuple[str, ...], tuple]]': tuple,
         'Union["Resolved", int]': (Resolved, int),
+        'Union[Tuple[str, int], Tuple[bool, int], Tuple[bytes, int]]': tuple,
+        'Union[Collection[MutableMapping[str, Optional[Attr]]], "Resolved", Tuple[str, ...], Tuple[int, ...], None]':
+            (type(None), tuple, Resolved, Collection.__origin__),
+        'Union["Tuple[int]", "Tuple[str]"]': tuple,
+        'Tuple[Tuple]': tuple,
+        'T': object,
+        'TInt': int,
+        'TAny': object,
+        'TColl': (tuple, set, list),
+        'K': (tuple, list, type(None)),
+        'Union[TColl, K]': (tuple, set, list, type(None)),
+        'Optional[K]': (tuple, list, type(None)),
+        'Optional[T]': object,
     }
 
+    print("\n\nBasic test\n")
     for i, (ann, spec) in enumerate(types.items()):
-        res = Attr(f'a{i}', ann).type
-        assert res == spec, f'Expected {spec}, got {res}'
+        res = Attr(f'attr{i}', ann).type
+        is_valid = res == spec if isinstance(spec, type) else set(res) == set(spec)
+        assert is_valid, f'{ann} - expected {spec}, got {res}'
+
+    print("\n\nTest ClassVar[...]\n")
+    for i, (ann, spec) in enumerate(types.items()):
+        if ann.startswith('ClassVar') or not ann: continue
+        else: ann = f'ClassVar[{ann}]'
+
+        res = Attr(f'classvar{i}', ann).type
+
+        is_valid = res == spec if isinstance(spec, type) else set(res) == set(spec)
+        assert is_valid, f'{ann} - expected {spec}, got {res}'
+
+    print("\n\nTest Optional[...]\n")
+    for i, (ann, spec) in enumerate(types.items()):
+        if ann.startswith('ClassVar'):
+            ann = f"ClassVar[Optional{ann.lstrip('ClassVar')}]"
+        elif ann.startswith('Optional') or not ann:
+            continue
+        else:
+            ann = f'Optional[{ann}]'
+
+        if isinstance(spec, tuple):
+            if type(None) not in spec:
+                spec = (*spec, type(None))
+        else:
+            if spec is not object and spec is not type(None):
+                spec = (spec, type(None))
+
+        res = Attr(f'optional{i}', ann).type
+
+        is_valid = res == spec if isinstance(spec, type) else set(res) == set(spec)
+        assert is_valid, f'{ann} - expected {spec}, got {res}'
+
+    print("\n\nTest ForwardRef[...]\n")
+    for i, (ann, spec) in enumerate(types.items()):
+        if ann.startswith('ClassVar'):
+            ann = f"ClassVar[Union{ann.lstrip('ClassVar')}]"
+        elif not ann:
+            continue
+        else:
+            ann = f'Union[{ann}]'
+        res = Attr(f'attr{i}', ann).type
+        is_valid = res == spec if isinstance(spec, type) else set(res) == set(spec)
+        assert is_valid, f'{ann} - expected {spec}, got {res}'
+
+    # TODO: error cases
+
+    with pytest.raises(ValueError, match=re.escape("annotation 'Ellipsis' is invalid type")):
+        res = Attr('ellipsisErr', '...').type
+
+    with pytest.raises(NameError, match=re.escape("name 'Err' is not defined")):
+        res = Attr('nameErr', 'Union[Tuple[str, str, int], "Err", "Resolved"]').type
 
 
 if __name__ == '__main__':
