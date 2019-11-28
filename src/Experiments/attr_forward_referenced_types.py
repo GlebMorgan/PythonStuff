@@ -208,23 +208,27 @@ class AttrTypeDescriptor:
                     else:
                         spec[i] = item.__origin__
                         i += 1
-                elif item is Any:
+                elif item is object or item is Any:
                     spec = (object,)
                     break
+                elif isinstance(item, type):
+                    i += 1
                 elif item is Ellipsis and len(spec) > 1:
                     # Allow only nested Ellipsis
                     del spec[i]
                 elif isinstance(item, TypeVar):
-                    spec.extend(item.__constraints__)
-                    del spec[i]
+                    if item.__bound__ is not None:
+                        spec[i] = item.__bound__
+                    elif item.__constraints__:
+                        spec.extend(item.__constraints__)
+                        del spec[i]
+                    else:
+                        spec = (object,)
+                        break
                 elif isinstance(item, ForwardRef):
                     # TESTME: does ForwardRef._evaluate() would work properly here?
                     spec[i] = item._evaluate(globs, locs)
-                    i += 1
-
-                if isinstance(item, type):
-                    i += 1
-                elif isinstance(item, SpecialForm) or item in (Generic, _Protocol):
+                else:
                     raise ValueError(f"Attr '{attr.name}' - "
                                      f"annotation '{typeval}' is invalid type")
             spec = tuple(set(spec))
