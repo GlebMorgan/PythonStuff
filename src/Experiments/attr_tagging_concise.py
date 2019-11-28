@@ -183,7 +183,7 @@ class AnnotationSpy(dict):
         elif not isinstance(var, Attr): var = Attr(var)
 
         # The only place attr name is being set
-        var.name = attrname
+        object.__setattr__(var, 'name', attrname)
 
         # Put annotation on its place, skip ATTR_ANNOTATION
         if annotation == ATTR_ANNOTATION: annotation = EMPTY_ANNOTATION
@@ -192,7 +192,7 @@ class AnnotationSpy(dict):
         # CONSIDER: Parse generic annotations correctly (use re, dedicated module or smth)
         # Set attr as classvar and strip annotation, if that's the case
         if annotation.startswith('ClassVar'):
-            var.classvar = True
+            object.__setattr__(var, 'classvar', True)
             annotation = annotation.strip('ClassVar')
             if annotation.startswith('[') and annotation.endswith(']'):
                 annotation = annotation[1:-1]
@@ -201,15 +201,15 @@ class AnnotationSpy(dict):
             else:
                 raise ClasstoolsError(f"Attr '{attrname}': invalid ClassVar annotation 'ClassVar{annotation}'")
         else:
-            var.classvar = False
+            object.__setattr__(var, 'classvar', False)
 
         # Set .type with removed 'ClassVar[...]' and 'attr'
-        var.type = annotation
+        object.__setattr__(var, 'type', annotation)
 
         # Set options which was not defined earlier by option definition objects / Attr kwargs
         for option in (__options__):
             if not hasattr(var, option):
-                setattr(var, option, self.owner.sectionOptions[option])
+                object.__setattr__(var, option, self.owner.sectionOptions[option])
 
         # NOTE: 'None' is a valid tag key (to allow for an easy sample of all non-tagged attrs)
         self.owner.tags[var.tag].add(attrname)
@@ -243,11 +243,12 @@ class Attr:
     IGNORED = type("ATTR_IGNORE_MARKER", (), dict(__slots__=()))()
 
     def __init__(self, value=Null, **options):
-        self.name = Null
-        self.default = value
-        self.type = Null
+        assign = super().__setattr__
+        assign('name', Null)  # just to get __str__() to work
+        assign('type', Null)  # just to get __str__() to work
+        assign('default', value)
         for name, value in options.items():
-            setattr(self, name, value)
+            assign(name, value)
 
     def __str__(self):
         return (
@@ -263,7 +264,8 @@ class Attr:
 
     def __repr__(self): return auto_repr(self, self.name)
 
-    def __neg__(self): return self.IGNORED
+    def __setattr__(self, key, value):
+        raise AttributeError(f"'{self.__class__.__name__}' object is immutable")
 
     @property
     def options(self): return {name: getattr(self, name) for name in __options__}
@@ -333,7 +335,7 @@ class Option:
             if hasattr(target, self.name):
                 raise ClasstoolsError(f"Duplicate option '|{self.name}' - "
                                       f"was already set to '{getattr(target, self.name)}'")
-            setattr(target, self.name, self.value)
+            object.__setattr__(target, self.name, self.value)
 
         del self.value
         return target
