@@ -237,10 +237,29 @@ class Attr:
             🕓         lazy
     """
 
-    # ' ... , *__options__' is not used here because PyCharm fails to resolve attributes this way round
-    __slots__ = 'name', 'default', 'type', 'classvar', 'tag', 'skip', 'const', 'lazy', 'kw'
+    # Params
+    name: str
+    default: Any
+    type: str
+    classvar: bool
 
-    IGNORED = type("ATTR_IGNORE_MARKER", (), dict(__slots__=()))()
+    # Service
+    _annotation_: str
+    _typespec_: Union[type, Tuple[type, ...]]
+
+    # Options
+    tag: Optional[str]
+    skip: bool
+    const: bool
+    lazy: str
+    kw: bool
+
+    # ' ... , *__options__' is not used here because PyCharm fails to resolve attributes this way round
+    __slots__ = ('name', 'default', 'type', 'classvar',   # params
+                 '_annotation_', '_typespec_',            # service
+                 'tag', 'skip', 'const', 'lazy', 'kw')    # options
+
+    IGNORED: ClassVar = type("ATTR_IGNORE_MARKER", (), dict(__slots__=()))()
 
     def __init__(self, value=Null, **options):
         assign = super().__setattr__
