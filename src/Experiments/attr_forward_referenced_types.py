@@ -153,13 +153,12 @@ class AttrTypeDescriptor:
         # Compiled annotation expressions cache
         self._code_: Dict[Attr, CodeType] = {}
 
-    def parse(self, attr: Attr, annotation: Union[CodeType, Any] = Null, strict: bool = True):
-        """ If annotation is pre-compiled code, it is evaluated with assumption
-                that all names inside it could be resolved
-        """
-
-        if isinstance(annotation, CodeType):
-            code = annotation
+    def parse(self, attr: Attr, annotation: str = Null, *, strict: bool = False):
+        if annotation is Null:
+            try:
+                code = self._code_[attr]
+            except KeyError:
+                raise TypeError("Annotation cache is missing - 'annotation' string needs to be provided")
 
         # Pre-compile annotation expression
         else:
@@ -233,7 +232,7 @@ class AttrTypeDescriptor:
         except NameError as e:
             # Annotation may contain forward reference
             if strict:
-                raise NameError(f"Attr '{attr.name} - cannot resolve annotation - {e}")
+                raise NameError(f"Attr '{attr.name}' - cannot resolve annotation - {e}")
             else:
                 self._code_[attr] = code  # cache bytecode
                 return  # postpone evaluation
@@ -245,7 +244,7 @@ class AttrTypeDescriptor:
             else:
                 print(f"{attr.name}._typespec_ - NOT ASSIGNED")
 
-    def __get__(self, instance: Attr, owner: Type[Attr]) -> Union[type, Tuple[type, ...], TypeDescr]:
+    def __get__(self, instance: Attr, owner: Type[Attr]) -> Union[type, Tuple[type, ...], AttrTypeDescriptor]:
         if instance is None: return self
         if not hasattr(instance, '_typespec_'):
             self.parse(instance, self._code_[instance])
@@ -261,7 +260,7 @@ class Attr:
         print(f"Attr.__init__(name={name}, annotation={annotation})")
         self.name = name
         self.ann = annotation
-        self.__class__.type.parse(self, annotation, strict=False)
+        self.__class__.type.parse(self, annotation)
 
     def __repr__(self):
         return auto_repr(self, self.name)
