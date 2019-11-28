@@ -147,9 +147,11 @@ EMPTY_ANNOTATION = ''
 
 
 class AttrTypeDescriptor:
-    __slots__ = '_code_'
+    __slots__ = '_code_', 'typeSlot', 'annotationSlot'
 
-    def __init__(self):
+    def __init__(self, typeSlot: str, annotationSlot: str):
+        self.typeSlot: str = typeSlot
+        self.annotationSlot: str = annotationSlot
         # Compiled annotation expressions cache
         self._code_: Dict[Attr, CodeType] = {}
 
@@ -163,8 +165,8 @@ class AttrTypeDescriptor:
         # Pre-compile annotation expression
         else:
             if annotation is EMPTY_ANNOTATION:
-                attr._annotation_ = None
-                attr._typespec_ = object
+                setattr(attr, self.annotationSlot, None)
+                setattr(attr, self.typeSlot, object)
                 return
             try:
                 code = compile(annotation, '<annotation>', 'eval')
@@ -177,18 +179,18 @@ class AttrTypeDescriptor:
         # TODO: define type Unions as [type1, type2, ..., typeN]
         try:
             typeval = eval(code, globs, locs)
-            attr._annotation_ = typeval
+            setattr(attr, self.annotationSlot, typeval)
 
             if isinstance(typeval, type):
-                attr._typespec_ = typeval
+                setattr(attr, self.typeSlot, typeval)
                 return
 
             if typeval is None:
-                attr._typespec_ = type(None)
+                setattr(attr, self.typeSlot, type(None))
                 return
 
             if typeval is Any:
-                attr._typespec_ = object
+                setattr(attr, self.typeSlot, object)
                 return
 
             if isinstance(typeval, GenericAlias) and typeval.__origin__ is ClassVar:
@@ -241,24 +243,26 @@ class AttrTypeDescriptor:
                 self._code_[attr] = code  # cache bytecode
                 return  # postpone evaluation
         else:
-            attr._typespec_ = spec if len(spec) > 1 else spec[0]
+            setattr(attr, self.typeSlot, spec if len(spec) > 1 else spec[0])
         finally:
-            if hasattr(attr, '_typespec_'):
-                print(f"{attr.name}._typespec_: {attr._typespec_}")
+            if hasattr(attr, self.typeSlot):
+                print(f"{attr.name}.{self.typeSlot}: {getattr(attr, self.typeSlot)}")
             else:
-                print(f"{attr.name}._typespec_ - NOT ASSIGNED")
+                print(f"{attr.name}.{self.typeSlot} - NOT ASSIGNED")
 
     def __get__(self, instance: Attr, owner: Type[Attr]) -> Union[type, Tuple[type, ...], AttrTypeDescriptor]:
         if instance is None: return self
-        if not hasattr(instance, '_typespec_'):
-            self.parse(instance, self._code_[instance])
-        return instance._typespec_
+        try:
+            return getattr(instance, self.typeSlot)
+        except AttributeError:
+            self.parse(instance, strict=True)
+            return getattr(instance, self.typeSlot)
 
 
 class Attr:
     __slots__ = 'name', 'ann', '_typespec_', '_annotation_'
 
-    type = AttrTypeDescriptor()
+    type = AttrTypeDescriptor(typeSlot='_typespec_', annotationSlot='_annotation_')
 
     def __init__(self, name, annotation):
         print(f"Attr.__init__(name={name}, annotation={annotation})")
