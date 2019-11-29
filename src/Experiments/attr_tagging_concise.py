@@ -454,6 +454,7 @@ class Attr:
 
 class Option:
     """ TODO: Option docstring
+        /option should go before any |option (that is just because of '/' and '|' operators priorities)
         Syntax:
             |option       – enable option (if supported)
             |option(arg)  – set option value to arg (if supported)
@@ -903,25 +904,25 @@ def classtools(cls):
     return cls
 
 
-# TODO: Move all options to options.py, define __all__ there and import options as 'from options import *'
-""" Assign a tag to attr and adds it to __tags__ dict """
+# CONSIDER: Move all options to options.py, define __all__ there and import options as 'from options import *'
+
+""" Assign a tag to attr and add attr name to __tags__ dict """
 tag = Option('tag', default=None, flag=False)
 
-""" Exclude attr from initialization machinery """
+""" Exclude attr from generated __init__ arguments """
 skip = Option('skip', flag=True)
 
-""" Deny value assignments (uses descriptor) """
+""" Deny attr reassignments (uses descriptor) """
 const = Option('const', flag=True)
 
-""" Evaluate value on first access, store it and return 
-    stored value on all subsequent queries (uses descriptor) """
+""" Evaluate and store value on first access (uses __getattr__),
+    return stored value on all subsequent queries """
 lazy = Option('lazy', flag=False)
 
 """ Use attr as keyword-only argument in __init__ """
 kw = Option('kw', flag=True)
 
 
-# TODO: review this in the end
 # If adding new option, add it to:
 #     1) Option() objects above
 #     2) __options__ global variable
@@ -930,9 +931,9 @@ kw = Option('kw', flag=True)
 #     6) Classtools.resetOptions()
 #     7) ClassDict name injections in Classtools.__prepare__
 #     8) Option __doc__
-#     9) Check whether it is needed to add variable with new option
-#        to __slots__ in Classtools.__new__
-#     10) Is it needed to skip attr initialization with new option set in Classtools.__init_attrs__
+#     9) Check whether it is needed to add variable with new option set to __slots__ in Classtools.__new__
+#     10) Review Classtools methods: .verifyOptions(), .injectSlots(), .injectInit(), .setupDescriptors()
+
 
 attr = ATTR_ANNOTATION  # placeholder for empty annotation
 OPTIONS = OptionSection()
@@ -980,7 +981,7 @@ def test_concise_tagging_basic():
     @classtools
     class A(metaclass=Classtools, slots=True):
 
-        a0: str = -Attr() |tag('a')
+        a0: str = Attr.ignore() |tag('a')
         a: int = 4 |tag("a_var") |lazy('set_a') |const
         c: Any = 3
         lazy('will_be_ignored')
@@ -992,10 +993,10 @@ def test_concise_tagging_basic():
             m: attr = 7 |lazy('get_m')
 
         with TAG['tag'] |skip:
-            b: str = 'loool' /skip
-            d: ClassVar[int] = 0 |kw
-            g: ClassVar[int] = 42 |tag(None)
-            k: ClassVar[str] = 'clsvar'
+            b: str = 'loool'
+            d: ClassVar[int] = 0 /const /skip
+            g: ClassVar[int] = 42 /skip |tag(None)
+            k: ClassVar[str] = 'clsvar' /skip
 
         h: list = []
 
