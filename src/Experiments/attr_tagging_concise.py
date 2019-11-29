@@ -62,9 +62,7 @@ log.setLevel('DEBUG')
 
 # TODO: remove OrderedSet dependency
 
-# TODO: add |type option to check types (including nested cases like Union[Tuple[str, ...], Tuple[bytes, ...]]
-
-# TODO: define type Unions as [type1, type2, ..., typeN]
+# ✗ define type Unions as [type1, type2, ..., typeN] - will break PyCharm type introspection
 
 # TODO: EVALUATE_TYPES global option - triggers annotation evaluation
 #       (attr.type returns _typespec_ or just annotation string)
@@ -88,6 +86,8 @@ log.setLevel('DEBUG')
 
 # CONSIDER: Add to __init__ only those args that are required for .init()
 #           initSig = signature(clsdict['init']) ... bla bla bla
+
+# CONSIDER: add |type option to check types (including nested cases like Union[Tuple[str, ...], Tuple[bytes, ...]]
 
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 
@@ -249,6 +249,11 @@ class AttrTypeDescriptor:
                 `None` type annotation is converted to `NoneType`
                 `ForwardRef`s are evaluated in-place, name resolution failures are treated
                     the same way as if all annotation expression itself was just name of a type
+
+            Raise:
+                SyntaxError - annotation string contains invalid Python expression
+                TypeError - missing annotation expression cache
+                NameError - failed to resolve type name(s) during annotation expression evaluation
         """
 
         assign = partial(object.__setattr__, attr)
@@ -353,6 +358,11 @@ class AttrTypeDescriptor:
                 print(f"{attr.name}.{self.typeSlot} - NOT ASSIGNED")
 
     def __get__(self, instance: Attr, owner: Type[Attr]) -> Union[type, Tuple[type, ...], AttrTypeDescriptor]:
+        """ Return typespec for given attr. If typespec is not yet evaluated,
+                parse annotation expression and return newly acquired typespec
+            Raise:
+                NameError - if annotation expression contains unresolvable name
+        """
         if instance is None: return self
         try:
             return getattr(instance, self.typeSlot)
@@ -512,14 +522,11 @@ class Option:
 
 class Classtools(type):  # CONSIDER: Classtools
     """ TODO: Classtools docstring
-        Variables defined without annotations are not tagged
-        SECTION without any attrs inside is not created
         Tag names are case-insensitive
-        Member methods (class is direct parent in __qualname__) are not tagged,
-            even if they are assigned not using 'def'
-        Supports `ClassName['attr']` syntax for accessing attr objects
-        • slots ——► auto inject slots from __attrs__
-        • init ——► auto-initialize all __attrs__ defaults to 'None'
+        Supports `ClassName['attr']` syntax for accessing Attr objects
+        • slots ——► auto inject `__slots__` from `__attrs__`
+        • init ——► auto-add `__init__()` method with .default assignments
+        • initattrs ——► auto-initialize all `__attrs__` defaults to this value
     """
 
     __tags__: DefaultDict[str, OrderedSet]
