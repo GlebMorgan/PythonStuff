@@ -6,6 +6,7 @@ from functools import partial
 from itertools import starmap, chain
 from operator import setitem
 from re import findall
+from sys import modules
 from types import CodeType
 from typing import Any, ClassVar, Union, Dict, DefaultDict, Tuple, Optional, TypeVar, Type
 from typing import ForwardRef
@@ -265,24 +266,28 @@ class AttrTypeDescriptor:
             except KeyError:
                 raise TypeError("Annotation cache is missing - 'annotation' string needs to be provided")
 
-        # Pre-compile annotation expression
         else:
+            # Fast-forward empty annotations
             if annotation is EMPTY_ANNOTATION:
                 assign(self.annotationSlot, None)
                 assign(self.typeSlot, object)
                 assign(self.classvarSlot, False)
                 return
+
+            # Set .classvar
+            assign(self.classvarSlot, annotation.startswith(ClassVar._name))
+
+            # Pre-compile annotation expression
             try:
                 code = compile(annotation, '<annotation>', 'eval')
             except SyntaxError as e:
                 raise SyntaxError(f"Attr '{attr.name}' - cannot evaluate annotation '{annotation}' - {e}")
 
-        # Set .classvar
-        assign(self.classvarSlot, annotation.startswith(ClassVar._name))
-
         # Parse expression to typespec
         globs = globals()
-        locs = vars(typing)  # TODO: evaluation scope
+        # CONSIDER: ▼ do I need names from typing?
+        locs = {**vars(typing), **modules[attr.__module__].__dict__}
+
         try:
             typeval = eval(code, globs, locs)
             assign(self.annotationSlot, typeval)
