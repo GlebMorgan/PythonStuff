@@ -2,7 +2,7 @@ from __future__ import annotations as annotations_feature
 
 import logging
 import re
-from typing import ClassVar, Any
+from typing import ClassVar, Any, Union
 
 import pytest
 from orderedset import OrderedSet
@@ -339,7 +339,7 @@ class TestSlots:
                 h: bool = True /kw
             k: Any = Attr('replace', tag='tag_h')
             m: attr = () |tag('tag_m') |lazy('get_m') |const |skip
-            n: ClassVar[ClassVar] = 'n_classvar'
+            n: ClassVar[Union[str, int]] = 'n_classvar'
 
             def get_m(self): return 'm_value'
 
@@ -413,4 +413,5 @@ class TestSlots:
 
 
     # def test_option_apply_order(self):
-    #     ...
+    #     class Test(metaclass=Classtools |slots /init):
+    #         ...
