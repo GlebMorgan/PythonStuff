@@ -1,14 +1,19 @@
 from __future__ import annotations as annotations_feature
 
+import typing
 from collections import defaultdict
 from functools import partial
 from itertools import starmap, chain
 from operator import setitem
 from re import findall
-from typing import Any, ClassVar, Union, Dict, DefaultDict, Tuple, Optional
+from types import CodeType
+from typing import Any, ClassVar, Union, Dict, DefaultDict, Tuple, Optional, TypeVar, Type
+from typing import ForwardRef
+from typing import _GenericAlias as GenericAlias
 
 from Utils import auto_repr, Null, Logger, attachItem, formatDict, isDunder
 from orderedset import OrderedSet
+
 
 __options__ = 'tag', 'skip', 'const', 'lazy', 'kw'
 
@@ -194,22 +199,8 @@ class AnnotationSpy(dict):
         if annotation == ATTR_ANNOTATION: annotation = EMPTY_ANNOTATION
         else: super().__setitem__(attrname, annotation)
 
-        # CONSIDER: Parse generic annotations correctly (use re, dedicated module or smth)
-        # Set attr as classvar and strip annotation, if that's the case
-        if annotation.startswith('ClassVar'):
-            object.__setattr__(var, 'classvar', True)
-            annotation = annotation.strip('ClassVar')
-            if annotation.startswith('[') and annotation.endswith(']'):
-                annotation = annotation[1:-1]
-            elif annotation == '':
-                annotation = EMPTY_ANNOTATION
-            else:
-                raise ClasstoolsError(f"Attr '{attrname}': invalid ClassVar annotation 'ClassVar{annotation}'")
-        else:
-            object.__setattr__(var, 'classvar', False)
-
-        # Set .type with removed 'ClassVar[...]' and 'attr'
-        object.__setattr__(var, 'type', annotation)
+        # Parse annotation to .type
+        var.__class__.type.parse(var, annotation)
 
         # Set options which was not defined earlier by option definition objects / Attr kwargs
         for option in (__options__):
@@ -219,6 +210,155 @@ class AnnotationSpy(dict):
         # NOTE: 'None' is a valid tag key (to allow for an easy sample of all non-tagged attrs)
         self.owner.tags[var.tag].add(attrname)
         self.owner.attrs[attrname] = var
+
+
+class AttrTypeDescriptor:
+    """ Get attr typespec form its annotation
+
+        • 'typespec' is a type / tuple of types, which are valid
+            for the owner variable according to its annotation
+        • 'annotation' is type or GenericAlias object that is
+            acquired by evaluating annotation string
+
+        'typespec' and 'annotation' attributes are assigned to an owner Attr object
+            attributes, provided in constructor.
+    """
+
+    __slots__ = '_code_', 'typeSlot', 'annotationSlot', 'classvarSlot'
+
+    def __init__(self, typeSlot: str, annotationSlot: str, classvarSlot: str):
+        self.typeSlot: str = typeSlot
+        self.annotationSlot: str = annotationSlot
+        self.classvarSlot: str = classvarSlot
+        # Compiled annotation expressions cache
+        self._code_: Dict[Attr, CodeType] = {}
+
+    def parse(self, attr: Attr, annotation: str = Null, *, strict: bool = False):
+        """ Parse annotation string and set generated typespec to attr's `.typeSlot` attribute
+                and evaluated annotation - to `.annotationSlot`
+
+            'strict' - defines what to do in case of name resolution failure during annotation evaluation
+                       True - raise NameError (used in postponed type evaluation)
+                       False - cache annotation expression code and exit (used in Attr initialization)
+
+            If 'annotation' is not provided, it is considered to be stored in cache
+
+            Details:
+                If some element inside annotation expression allows for arbitrary type,
+                    typespec will contain the most general `object` type
+                `None` type annotation is converted to `NoneType`
+                `ForwardRef`s are evaluated in-place, name resolution failures are treated
+                    the same way as if all annotation expression itself was just name of a type
+        """
+
+        assign = partial(object.__setattr__, attr)
+
+        # Get annotation expression code from cache, if annotation string is not provided
+        if annotation is Null:
+            try:
+                code = self._code_[attr]
+            except KeyError:
+                raise TypeError("Annotation cache is missing - 'annotation' string needs to be provided")
+
+        # Pre-compile annotation expression
+        else:
+            if annotation is EMPTY_ANNOTATION:
+                assign(self.annotationSlot, None)
+                assign(self.typeSlot, object)
+                assign(self.classvarSlot, False)
+                return
+            try:
+                code = compile(annotation, '<annotation>', 'eval')
+            except SyntaxError as e:
+                raise SyntaxError(f"Attr '{attr.name}' - cannot evaluate annotation '{annotation}' - {e}")
+
+        # Set .classvar
+        assign(self.classvarSlot, annotation.startswith(ClassVar._name))
+
+        # Parse expression to typespec
+        globs = globals()
+        locs = vars(typing)  # TODO: evaluation scope
+        try:
+            typeval = eval(code, globs, locs)
+            assign(self.annotationSlot, typeval)
+
+            if isinstance(typeval, type):
+                assign(self.typeSlot, typeval)
+                return
+
+            if typeval is None:
+                assign(self.typeSlot, type(None))
+                return
+
+            if typeval is Any or typeval is ClassVar:
+                assign(self.typeSlot, object)
+                return
+
+            if isinstance(typeval, GenericAlias) and typeval.__origin__ is ClassVar:
+                spec = list(typeval.__args__)
+            else:
+                spec = [typeval]
+
+
+            i = 0
+            while True:
+                try: item = spec[i]
+                except IndexError: break
+
+                if isinstance(item, GenericAlias):
+                    if item.__origin__ is Union:
+                        spec.extend(item.__args__)
+                        del spec[i]
+                    else:
+                        spec[i] = item.__origin__
+                        i += 1
+                elif item is object or item is Any:
+                    spec = (object,)
+                    break
+                elif isinstance(item, type):
+                    i += 1
+                elif item is Ellipsis and len(spec) > 1:
+                    # Allow only nested Ellipsis
+                    del spec[i]
+                elif isinstance(item, TypeVar):
+                    if item.__bound__ is not None:
+                        spec[i] = item.__bound__
+                    elif item.__constraints__:
+                        spec.extend(item.__constraints__)
+                        del spec[i]
+                    else:
+                        spec = (object,)
+                        break
+                elif isinstance(item, ForwardRef):
+                    # TESTME: does ForwardRef._evaluate() would work properly here?
+                    spec[i] = item._evaluate(globs, locs)
+                else:
+                    raise ValueError(f"Attr '{attr.name}' - "
+                                     f"annotation '{typeval}' is invalid type")
+            spec = tuple(set(spec))
+
+        # Handle the case when annotation contains forward reference
+        except NameError as e:
+            if strict:
+                raise NameError(f"Attr '{attr.name}' - cannot resolve annotation - {e}")
+            else:
+                self._code_[attr] = code  # cache bytecode
+                return  # postpone evaluation
+        else:
+            assign(self.typeSlot, spec if len(spec) > 1 else spec[0])
+        finally:
+            if hasattr(attr, self.typeSlot):
+                print(f"{attr.name}.{self.typeSlot}: {getattr(attr, self.typeSlot)}")
+            else:
+                print(f"{attr.name}.{self.typeSlot} - NOT ASSIGNED")
+
+    def __get__(self, instance: Attr, owner: Type[Attr]) -> Union[type, Tuple[type, ...], AttrTypeDescriptor]:
+        if instance is None: return self
+        try:
+            return getattr(instance, self.typeSlot)
+        except AttributeError:
+            self.parse(instance, strict=True)
+            return getattr(instance, self.typeSlot)
 
 
 class Attr:
@@ -242,10 +382,12 @@ class Attr:
             🕓         lazy
     """
 
+    IGNORED: ClassVar = type("ATTR_IGNORE_MARKER", (), dict(__slots__=()))()
+
     # Params
     name: str
     default: Any
-    type: str
+    type = AttrTypeDescriptor(typeSlot='_typespec_', annotationSlot='_annotation_', classvarSlot='classvar')
     classvar: bool
 
     # Service
@@ -260,16 +402,13 @@ class Attr:
     kw: bool
 
     # ' ... , *__options__' is not used here because PyCharm fails to resolve attributes this way round
-    __slots__ = ('name', 'default', 'type', 'classvar',   # params
+    __slots__ = ('name', 'default', 'classvar',   # params
                  '_annotation_', '_typespec_',            # service
                  'tag', 'skip', 'const', 'lazy', 'kw')    # options
-
-    IGNORED: ClassVar = type("ATTR_IGNORE_MARKER", (), dict(__slots__=()))()
 
     def __init__(self, value=Null, **options):
         assign = super().__setattr__
         assign('name', Null)  # just to get __str__() to work
-        assign('type', Null)  # just to get __str__() to work
         assign('default', value)
         for name, value in options.items():
             assign(name, value)
