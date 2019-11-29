@@ -188,7 +188,7 @@ class AttrTypeDescriptor:
                 setattr(attr, self.typeSlot, type(None))
                 return
 
-            if typeval is Any:
+            if typeval is Any or typeval is ClassVar:
                 setattr(attr, self.typeSlot, object)
                 return
 
@@ -302,12 +302,6 @@ def test_FRef():
     res = Attr('b', 'Union["Resolved", Tuple["Resolved", ...]]').type
     assert set(res) == {tuple, Resolved}, set(res)
 
-    with pytest.raises(SyntaxError, match=re.escape("unexpected EOF while parsing")):
-        res = Attr('y', ' ').type
-
-    with pytest.raises(NameError, match=re.escape("name 'Error' is not defined")):
-        res = Attr('z', 'Error').type
-
     T = TypeVar('T')
     TInt = TypeVar('TInt', bound=int)
     TAny = TypeVar('TAny', bound=Any)
@@ -319,6 +313,7 @@ def test_FRef():
         'Any': object,
         'object': object,
         'int': int,
+        'ClassVar': object,
         'Union[str, str, type("s")]': str,
         'Union[tuple]': tuple,
         'Union[str, list]': (list, str),
@@ -373,10 +368,12 @@ def test_FRef():
 
     print("\n\nTest Optional[...]\n")
     for i, (ann, spec) in enumerate(types.items()):
-        if ann.startswith('ClassVar'):
-            ann = f"ClassVar[Optional{ann.lstrip('ClassVar')}]"
-        elif ann.startswith('Optional') or not ann:
+        if ann.startswith('Optional') or not ann:
             continue
+        elif ann == 'ClassVar':
+            ann = 'ClassVar[Optional[Any]]'
+        elif ann.startswith('ClassVar'):
+            ann = f"ClassVar[Optional{ann.lstrip('ClassVar')}]"
         else:
             ann = f'Optional[{ann}]'
 
@@ -394,12 +391,13 @@ def test_FRef():
 
     print("\n\nTest ForwardRef[...]\n")
     for i, (ann, spec) in enumerate(types.items()):
-        if ann.startswith('ClassVar'):
-            ann = f"ClassVar[Union{ann.lstrip('ClassVar')}]"
+        if ann == 'ClassVar': ann = "ClassVar[Union['Any']]"
+        elif ann.startswith('ClassVar'):
+            ann = f"ClassVar[Union['{ann.lstrip('ClassVar[')[:-1]}']]"
         elif not ann:
             continue
         else:
-            ann = f'Union[{ann}]'
+            ann = f"Union['{ann}']"
         res = Attr(f'attr{i}', ann).type
         is_valid = res == spec if isinstance(spec, type) else set(res) == set(spec)
         assert is_valid, f'{ann} - expected {spec}, got {res}'
@@ -410,7 +408,13 @@ def test_FRef():
         res = Attr('ellipsisErr', '...').type
 
     with pytest.raises(NameError, match=re.escape("name 'Err' is not defined")):
+        res = Attr('z', 'Err').type
+
+    with pytest.raises(NameError, match=re.escape("name 'Err' is not defined")):
         res = Attr('nameErr', 'Union[Tuple[str, str, int], "Err", "Resolved"]').type
+
+    with pytest.raises(SyntaxError, match=re.escape("unexpected EOF while parsing")):
+        res = Attr('y', ' ').type
 
 
 if __name__ == '__main__':
