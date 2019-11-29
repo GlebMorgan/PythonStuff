@@ -2,13 +2,14 @@ from __future__ import annotations as annotations_feature
 
 import logging
 import re
-from typing import ClassVar, Any, Union
+from typing import ClassVar, Any, Union, TypeVar, List, Tuple, Callable, Collection
 
 import pytest
 from orderedset import OrderedSet
-from Utils import Logger
+from Utils import Logger, auto_repr
 
-from Experiments.attr_tagging_concise import Attr, Classtools, TAG, OPTIONS, attr, tag, lazy, skip, const, kw
+from Experiments.attr_tagging_concise import Classtools, TAG, OPTIONS, attr, tag, lazy, skip, const, kw
+from Experiments.attr_tagging_concise import Attr, AttrTypeDescriptor
 from Experiments.attr_tagging_concise import ConstDescriptor, ClasstoolsError, GetterError
 
 
@@ -410,7 +411,154 @@ class TestSlots:
         assert m.d == {1: 'a'}
         assert m.j == 'j_value'
 
+    def test_AttrTypeDescriptor(self):
+        print("@")
 
+        class AttrMock:
+            __slots__ = 'name', 'ann', '_typespec_', '_annotation_', 'classvar'
+
+            type = AttrTypeDescriptor(typeSlot='_typespec_', annotationSlot='_annotation_', classvarSlot='classvar')
+
+            def __init__(self, name, annotation):
+                print(f"Attr.__init__(name={name}, annotation={annotation})")
+                self.name = name
+                self.ann = annotation
+                self.__class__.type.parse(self, annotation)
+
+            def __repr__(self):
+                return auto_repr(self, self.name)
+
+        print("\n\nTest forward references\n")
+
+        with pytest.raises(NameError, match=re.escape("name 'Resolved' is not defined")):
+            res = AttrMock('b', 'Resolved').type
+
+        with pytest.raises(NameError, match=re.escape("name 'Resolved' is not defined")):
+            res = AttrMock('b', 'Union["Resolved", Tuple["Resolved", ...]]').type
+
+        class Resolved: pass
+
+        globals()['Resolved'] = Resolved
+
+        res = AttrMock('b', 'Resolved').type
+        assert res == Resolved, res
+
+        res = AttrMock('b', 'Union["Resolved", Tuple["Resolved", ...]]').type
+        assert set(res) == {tuple, Resolved}, set(res)
+
+        T = TypeVar('T')
+        TInt = TypeVar('TInt', bound=int)
+        TAny = TypeVar('TAny', bound=Any)
+        TColl = TypeVar('TColl', tuple, set, list)
+        K = TypeVar('K', bound=Union[Tuple[int, ...], List[int], None])
+        globals().update({typevar.__name__: typevar for typevar in (T, TInt, TColl, TAny, K)})
+
+        types = {
+            'Any': object,
+            'object': object,
+            'int': int,
+            'ClassVar': object,
+            'Union[str, str, type("s")]': str,
+            'Union[tuple]': tuple,
+            'Union[str, list]': (list, str),
+            'Union[str, int, "Resolved", Any]': object,
+            'Union[Union[bool, int], str, int]': (bool, str, int),
+            'Optional[str]': (type(None), str),
+            'Callable': Callable.__origin__,
+            'type': type,
+            'Attr': Attr,
+            'ClassVar[float]': float,
+            'ClassVar[Optional[Union[int, Union[int, type(3), int("1").__class__], int]]]': (type(None), int),
+            'Tuple[int, ...]': tuple,
+            'Dict[Union[str, int], Tuple[Optional[bool], Optional[float], Optional[str]]]': dict,
+            '': object,
+            'None': type(None),
+            'Tuple[int]': tuple,
+            'Dict[str, int]': dict,
+            'Union[None]': type(None),
+            'ClassVar[None]': type(None),
+            'ClassVar[Union[Tuple[int, ...], Tuple[str, ...], tuple]]': tuple,
+            'Union["Resolved", int]': (Resolved, int),
+            'Union[Tuple[str, int], Tuple[bool, int], Tuple[bytes, int]]': tuple,
+            'Union[Collection[MutableMapping[str, Optional[Attr]]], "Resolved", Tuple[str, ...], Tuple[int, ...], None]':
+                (type(None), tuple, Resolved, Collection.__origin__),
+            'Union["Tuple[int]", "Tuple[str]"]': tuple,
+            'Tuple[Tuple]': tuple,
+            'T': object,
+            'TInt': int,
+            'TAny': object,
+            'TColl': (tuple, set, list),
+            'K': (tuple, list, type(None)),
+            'Union[TColl, K]': (tuple, set, list, type(None)),
+            'Optional[K]': (tuple, list, type(None)),
+            'Optional[T]': object,
+        }
+
+        print("\n\nBasic test\n")
+        for i, (ann, spec) in enumerate(types.items()):
+            res = AttrMock(f'attr{i}', ann).type
+            is_valid = res == spec if isinstance(spec, type) else set(res) == set(spec)
+            assert is_valid, f'{ann} - expected {spec}, got {res}'
+
+        print("\n\nTest ClassVar[...]\n")
+        for i, (ann, spec) in enumerate(types.items()):
+            if ann.startswith('ClassVar') or not ann: continue
+            else: ann = f'ClassVar[{ann}]'
+
+            res = AttrMock(f'classvar{i}', ann).type
+
+            is_valid = res == spec if isinstance(spec, type) else set(res) == set(spec)
+            assert is_valid, f'{ann} - expected {spec}, got {res}'
+
+        print("\n\nTest Optional[...]\n")
+        for i, (ann, spec) in enumerate(types.items()):
+            if ann.startswith('Optional') or not ann:
+                continue
+            elif ann == 'ClassVar':
+                ann = 'ClassVar[Optional[Any]]'
+            elif ann.startswith('ClassVar'):
+                ann = f"ClassVar[Optional{ann.lstrip('ClassVar')}]"
+            else:
+                ann = f'Optional[{ann}]'
+
+            if isinstance(spec, tuple):
+                if type(None) not in spec:
+                    spec = (*spec, type(None))
+            else:
+                if spec is not object and spec is not type(None):
+                    spec = (spec, type(None))
+
+            res = AttrMock(f'optional{i}', ann).type
+
+            is_valid = res == spec if isinstance(spec, type) else set(res) == set(spec)
+            assert is_valid, f'{ann} - expected {spec}, got {res}'
+
+        print("\n\nTest ForwardRef[...]\n")
+        for i, (ann, spec) in enumerate(types.items()):
+            if ann == 'ClassVar': ann = "ClassVar[Union['Any']]"
+            elif ann.startswith('ClassVar'):
+                ann = f"ClassVar[Union['{ann.lstrip('ClassVar[')[:-1]}']]"
+            elif not ann:
+                continue
+            else:
+                ann = f"Union['{ann}']"
+            res = AttrMock(f'attr{i}', ann).type
+            is_valid = res == spec if isinstance(spec, type) else set(res) == set(spec)
+            assert is_valid, f'{ann} - expected {spec}, got {res}'
+
+        # TODO: error cases
+
+        with pytest.raises(ValueError, match=re.escape("annotation 'Ellipsis' is invalid type")):
+            res = AttrMock('ellipsisErr', '...').type
+
+        with pytest.raises(NameError, match=re.escape("name 'Err' is not defined")):
+            res = AttrMock('z', 'Err').type
+
+        with pytest.raises(NameError, match=re.escape("name 'Err' is not defined")):
+            res = AttrMock('nameErr', 'Union[Tuple[str, str, int], "Err", "Resolved"]').type
+
+        with pytest.raises(SyntaxError, match=re.escape("unexpected EOF while parsing")):
+            res = AttrMock('y', ' ').type
 
     # def test_option_apply_order(self):
     #     class Test(metaclass=Classtools |slots /init):
