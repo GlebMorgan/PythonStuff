@@ -148,6 +148,16 @@ EMPTY_ANNOTATION = ''
 
 
 class AttrTypeDescriptor:
+    """ Get attr typespec form its annotation
+
+        • 'typespec' is a type / tuple of types, which are valid
+            for the owner variable according to its annotation
+        • 'annotation' is type or GenericAlias object that is
+            acquired by evaluating annotation string
+
+        'typespec' and 'annotation' attributes are assigned to an owner Attr object
+            attributes, provided in constructor.
+    """
     __slots__ = '_code_', 'typeSlot', 'annotationSlot'
 
     def __init__(self, typeSlot: str, annotationSlot: str):
@@ -157,6 +167,24 @@ class AttrTypeDescriptor:
         self._code_: Dict[Attr, CodeType] = {}
 
     def parse(self, attr: Attr, annotation: str = Null, *, strict: bool = False):
+        """ Parse annotation string and set generated typespec to attr's `.typeSlot` attribute
+                and evaluated annotation - to `.annotationSlot`
+
+            'strict' - defines what to do in case of name resolution failure during annotation evaluation
+                       True - raise NameError (used in postponed type evaluation)
+                       False - cache annotation expression code and exit (used in Attr initialization)
+
+            If 'annotation' is not provided, it is considered to be stored in cache
+
+            Details:
+                If some element inside annotation expression allows for arbitrary type,
+                    typespec will contain the most general `object` type
+                `None` type annotation is converted to `NoneType`
+                `ForwardRef`s are evaluated in-place, name resolution failures are treated
+                    the same way as if all annotation expression itself was just name of a type
+        """
+
+        # Get annotation expression code from cache, if annotation string is not provided
         if annotation is Null:
             try:
                 code = self._code_[attr]
@@ -174,6 +202,7 @@ class AttrTypeDescriptor:
             except SyntaxError as e:
                 raise SyntaxError(f"Attr '{attr.name}' - cannot evaluate annotation '{annotation}' - {e}")
 
+        # Parse expression to typespec
         globs = globals()
         locs = vars(typing)  # TODO: evaluation scope
         try:
@@ -234,8 +263,8 @@ class AttrTypeDescriptor:
                                      f"annotation '{typeval}' is invalid type")
             spec = tuple(set(spec))
 
+        # Handle the case when annotation contains forward reference
         except NameError as e:
-            # Annotation may contain forward reference
             if strict:
                 raise NameError(f"Attr '{attr.name}' - cannot resolve annotation - {e}")
             else:
@@ -271,11 +300,6 @@ class Attr:
 
     def __repr__(self):
         return auto_repr(self, self.name)
-
-
-class Base:
-    def __init__(self):
-        self.a = Attr('a', 'str')
 
 
 def test_FRef():
