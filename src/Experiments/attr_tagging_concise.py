@@ -25,8 +25,6 @@ log.setLevel('DEBUG')
 
 # ——————————————————————————————————————————————————— KNOWN ISSUES ——————————————————————————————————————————————————— #
 
-# FIXME: pickle does not work
-
 # ✓ options state is saved until ror is called, no control over isolated option config and its application to attr
 
 # —————————————————————————————————————————————————————— TODOs ——————————————————————————————————————————————————————— #
@@ -957,12 +955,15 @@ def test_pickle():
         skip: attr = 'skip_attr' |skip
         def getLazy(self): return 'lazy_value'
         def init(self, e=88): self.e = e
+    PT.__qualname__ = PT.__qualname__.rsplit('.', maxsplit=1)[1]
+    globals()['PT'] = PT
+
     import pickle as p
     print(formatDict(PT.__attrs__))
     print(PT('void_attr', kw='kw_attr').lazy)
     pA = p.dumps(PT('void_attr', e=88, kw='kw_attr'))
     print(pA)
-    print(f"Unpickled same 'e' attr? - {p.loads(pA).e == PT().e}")
+    print(f"Unpickled same 'e' attr? - {p.loads(pA).e == PT('void_attr', e=88, kw='kw_attr').e}")
     exit()
 
 
@@ -970,8 +971,12 @@ def test_pickle_simple():
     class PTS(metaclass=Classtools, slots=True):
         """ Pickle test simple, slots"""
         a: attr = 1
+    PTS.__qualname__ = PTS.__qualname__.rsplit('.', maxsplit=1)[1]
+    print(PTS.__qualname__)
+    globals()['PTS'] = PTS
+
     import pickle as p
-    pClass = p.dumps(PTS)
+    pClass = p.dumps(PTS(), -1)
     print(pClass)
     print(f"Unpickled same 'a' attr? - {p.loads(pClass).a == PTS().a}")
 
@@ -1177,8 +1182,8 @@ def test_all_types():
 
 if __name__ == '__main__':
     # test_inject_slots()
-    test_concise_tagging_basic()
+    # test_concise_tagging_basic()
     # test_all_types()
-    # test_pickle()
+    test_pickle()
     # test_pickle_simple()
 
