@@ -691,6 +691,15 @@ def isDunder(name: str) -> bool:
             name[-3:-2] != '_' and
             len(name) > 4)
 
+
+class SingletonType(type):
+    _instances_ = {}
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances_:
+            cls._instances_[cls] = super().__call__(*args, **kwargs)
+        return cls._instances_[cls]
+
+
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 
 
