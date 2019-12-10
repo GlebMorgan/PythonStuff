@@ -1,4 +1,4 @@
-from __future__ import annotations as annotations_feature
+from __future__ import annotations as _
 
 import typing
 from collections import defaultdict
@@ -21,7 +21,7 @@ __options__ = 'tag', 'skip', 'const', 'lazy', 'kw'
 __all__ = 'Null', 'Classtools', 'Attr', 'attr', 'TAG', 'OPTIONS', *__options__
 
 log = Logger('Classtools')
-log.setLevel('DEBUG')
+log.setLevel('SPAM')
 
 # ——————————————————————————————————————————————————— KNOWN ISSUES ——————————————————————————————————————————————————— #
 
@@ -59,12 +59,22 @@ log.setLevel('DEBUG')
 
 # TODO: Way to define api/internal methods and fields (other than by naming conventions)
 
-# TODO: remove OrderedSet dependency
+# TODO: Remove OrderedSet dependency
 
-# ✗ define type Unions as [type1, type2, ..., typeN] - will break PyCharm type introspection
+# ✗ Define type Unions as [type1, type2, ..., typeN] - will break PyCharm type introspection
 
 # TODO: EVALUATE_TYPES global option - triggers annotation evaluation
 #       (attr.type returns _typespec_ or just annotation string)
+
+# TODO: |descr option to set attr value as class attr and not add attr to __slots__
+
+# TODO: Consider a way to exclude annotated variables from classtools machinery
+#       (just as Attr.IGNORED is made for ignoring annotated variables with no value)
+#       Maybe just add |ignore option that would just add class variable to clsdict
+
+# TODO: Make slots=False Classtools option to just add __dict__ to __slots__.
+#       That is because general_for_slotted_and_conventional_classes getattr() function invokes
+#       __getattr__() on a class, which is inefficient and breaks certain edge-cases
 
 # ———————————————————————————————————————————————————— ToCONSIDER ———————————————————————————————————————————————————— #
 
@@ -87,6 +97,9 @@ log.setLevel('DEBUG')
 #           initSig = signature(clsdict['init']) ... bla bla bla
 
 # CONSIDER: add |type option to check types (including nested cases like Union[Tuple[str, ...], Tuple[bytes, ...]]
+
+# CONSIDER: assign .type to Attr in __new__ to avoid postponed name resolutions of inner class types
+#           which are usually defined below instance attr 'declarations'
 
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 
@@ -403,15 +416,15 @@ class Attr:
 
     IGNORED: ClassVar = type("ATTR_IGNORE_MARKER", (), dict(__slots__=()))()
 
+    # Service
+    _annotation_: str
+    _typespec_: Union[type, Tuple[type, ...]]
+
     # Params
     name: str
     default: Any
     type: Union[type, Tuple[type, ...]] = AttrTypeDescriptor('_typespec_', '_annotation_')
     classvar: bool
-
-    # Service
-    _annotation_: str
-    _typespec_: Union[type, Tuple[type, ...]]
 
     # Options
     tag: Optional[str]
@@ -421,9 +434,9 @@ class Attr:
     kw: bool
 
     # ' ... , *__options__' is not used here because PyCharm fails to resolve attributes this way round
-    __slots__ = ('name', 'default', 'classvar',   # params
-                 '_annotation_', '_typespec_',            # service
-                 'tag', 'skip', 'const', 'lazy', 'kw')    # options
+    __slots__ = ('_annotation_', '_typespec_',          # service
+                 'name', 'default', 'classvar',         # params
+                 'tag', 'skip', 'const', 'lazy', 'kw')  # options
 
     def __init__(self, value=Null, **options):
         assign = super().__setattr__
@@ -668,7 +681,11 @@ class Classtools(type):  # CONSIDER: Classtools
         del metacls.attrs
         del metacls.annotations
 
-        return super().__new__(metacls, clsname, bases, clsdict)
+        # CONSIDER: replace above with
+        # for name in metacls.__annotations__:
+        #     delattr(metacls, name)
+
+        return cls
 
     def __getitem__(cls, item):
         return cls.__attrs__[item]
