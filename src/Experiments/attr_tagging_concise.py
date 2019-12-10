@@ -782,6 +782,9 @@ class Classtools(type):  # CONSIDER: Classtools
                 raise ClasstoolsError(f"Cannot find lazy evaluation method "
                                       f"'{getter}' for attr '{name}'")
 
+        # Store original __getattr__ method if it was already defined in a class
+        __getattr_native__ = clsdict.get('__getattr__')
+
         # Generate future __getattr__ method
         def evalLazyAttrs(self, name):
             if name in lazyAttrs:
@@ -794,17 +797,16 @@ class Classtools(type):  # CONSIDER: Classtools
                                               f".default is not provided")
                 setattr(self, name, result)
                 return result
+
+            # Call existing __getattr__ method, if defined
+            if __getattr_native__ is not None:
+                try: return __getattr_native__(self, name)
+                except AttributeError: pass
+
             # Will definitely fail, but with standard error message
             return getattr(super(self.__class__, self), name)
 
-        # Fuse with existing __getattr__ method, if defined
-        if '__getattr__' in clsdict:
-            def __getattr_combined__(self, item):
-                self.evalLazyAttrs(item)
-                return clsdict['__getattr__'](item)
-            clsdict['__getattr__'] = __getattr_combined__
-        else:
-            clsdict['__getattr__'] = evalLazyAttrs
+        clsdict['__getattr__'] = evalLazyAttrs
 
     @classmethod
     def setupDescriptors(metacls, cls):
