@@ -206,7 +206,6 @@ class TestSlots:
         for name, attr in E.__attrs__.items():
             if name in consts: assert attr.const is True, name
             else: assert attr.const is False, name
-        assert set(consts) & set(e.__slots__) == set()
 
         assert hasattr(E, 'e')
         assert isinstance(E.e, ConstDescriptor)
@@ -216,7 +215,7 @@ class TestSlots:
 
         assert hasattr(E, 'b')
         assert isinstance(E.b, ConstDescriptor)
-        with pytest.raises(AttributeError, match=re.escape("b_slot")):
+        with pytest.raises(AttributeError, match=re.escape("b")):
             e.b
         e.b = 3
         assert isinstance(E.b, ConstDescriptor)
@@ -272,16 +271,17 @@ class TestSlots:
         assert f.g is True
         assert f.h == 'h_value'
 
-        assert hasattr(F, 'k_slot')
+        assert hasattr(F.k, '__get__')
+        assert hasattr(F.k, '__set__')
         with pytest.raises(AttributeError): f.k_slot
         assert f.k == 'k_value'
-        assert f.k_slot == 'k_value'
+        assert f.__class__.k.__class__ == ConstDescriptor
+        assert repr(f.__class__.k.slot) == "<member 'k' of 'F' objects>"
         with pytest.raises(AttributeError, match=re.escape("Attr 'k' is declared constant")):
             f.k = 'will fail'
         assert f.k == 'k_value'
 
         assert f.m == ('m_value', )*3
-        assert f.m is f.m_slot
 
         with pytest.raises(ClasstoolsError,
                            match=re.escape("ClassAttr 'a' has incompatible options: |const, |lazy")):
@@ -355,7 +355,7 @@ class TestSlots:
 
         with pytest.raises(AttributeError, match=re.escape("Attr 'm' is declared constant")):
             h2.m = 5
-        assert h2.m_slot == 'm_value'
+        assert h2.m == 'm_value'
         assert H['m'].tag == 'tag_m'
 
         with pytest.raises(TypeError,
@@ -417,13 +417,13 @@ class TestSlots:
         class AttrMock:
             __slots__ = 'name', 'ann', '_typespec_', '_annotation_', 'classvar'
 
-            type = AttrTypeDescriptor(typeSlot='_typespec_', annotationSlot='_annotation_', classvarSlot='classvar')
+            type = AttrTypeDescriptor(typeSlot='_typespec_', annotationSlot='_annotation_')
 
             def __init__(self, name, annotation):
                 print(f"Attr.__init__(name={name}, annotation={annotation})")
                 self.name = name
                 self.ann = annotation
-                self.__class__.type.parse(self, annotation)
+                self.__class__.type.parse(self, annotation, globals())
 
             def __repr__(self):
                 return auto_repr(self, self.name)
@@ -492,6 +492,7 @@ class TestSlots:
             'Union[TColl, K]': (tuple, set, list, type(None)),
             'Optional[K]': (tuple, list, type(None)),
             'Optional[T]': object,
+            # TODO: test var=Union[type, type] and then annotating with var
         }
 
         print("\n\nBasic test\n")
@@ -560,6 +561,11 @@ class TestSlots:
         with pytest.raises(SyntaxError, match=re.escape("unexpected EOF while parsing")):
             res = AttrMock('y', ' ').type
 
+    # TODO: test option apply order
     # def test_option_apply_order(self):
     #     class Test(metaclass=Classtools |slots /init):
     #         ...
+
+    # TODO: test class already has __slots__ defined
+    # def test_combine_slots(self):
+    #     ...
