@@ -10,7 +10,7 @@ from Utils import Logger, auto_repr
 
 from Experiments.attr_tagging_concise import Classtools, TAG, OPTIONS, attr, tag, lazy, skip, const, kw
 from Experiments.attr_tagging_concise import Attr, AttrTypeDescriptor
-from Experiments.attr_tagging_concise import ConstDescriptor, ClasstoolsError, GetterError
+from Experiments.attr_tagging_concise import ConstSlotDescriptor, ClasstoolsError, GetterError
 
 
 log = Logger('Classtools.tests')
@@ -208,17 +208,17 @@ class TestSlots:
             else: assert attr.const is False, name
 
         assert hasattr(E, 'e')
-        assert isinstance(E.e, ConstDescriptor)
+        assert isinstance(E.e, ConstSlotDescriptor)
         assert e.e == 1
         with pytest.raises(AttributeError, match=re.escape("Attr 'e' is declared constant")):
             e.e = 4
 
         assert hasattr(E, 'b')
-        assert isinstance(E.b, ConstDescriptor)
+        assert isinstance(E.b, ConstSlotDescriptor)
         with pytest.raises(AttributeError, match=re.escape("b")):
             e.b
         e.b = 3
-        assert isinstance(E.b, ConstDescriptor)
+        assert isinstance(E.b, ConstSlotDescriptor)
         assert e.b == 3
         with pytest.raises(AttributeError, match=re.escape("Attr 'b' is declared constant")):
             e.b = 'will fail'
@@ -275,7 +275,7 @@ class TestSlots:
         assert hasattr(F.k, '__set__')
         with pytest.raises(AttributeError): f.k_slot
         assert f.k == 'k_value'
-        assert f.__class__.k.__class__ == ConstDescriptor
+        assert f.__class__.k.__class__ == ConstSlotDescriptor
         assert repr(f.__class__.k.slot) == "<member 'k' of 'F' objects>"
         with pytest.raises(AttributeError, match=re.escape("Attr 'k' is declared constant")):
             f.k = 'will fail'

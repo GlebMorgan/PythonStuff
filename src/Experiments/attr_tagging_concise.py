@@ -829,7 +829,7 @@ class Classtools(type):  # CONSIDER: Classtools
     def setupDescriptors(metacls, cls):
         for name, attr in metacls.attrs.items():
             if attr.const is True:
-                setattr(cls, name, ConstDescriptor(name, getattr(cls, name)))
+                setattr(cls, name, ConstSlotDescriptor(name, getattr(cls, name)))
 
     @staticmethod
     def mergeTags(parents, currentTags):
@@ -865,7 +865,7 @@ class Classtools(type):  # CONSIDER: Classtools
                 {option.name: option.default for option in (tag, skip, const, lazy, kw)})
 
 
-class ConstDescriptor:
+class ConstSlotDescriptor:
     __slots__ = 'slot', 'name'
 
     def __init__(self, name, descriptor):
