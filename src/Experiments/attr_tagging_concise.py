@@ -198,8 +198,8 @@ class AnnotationSpy(dict):
         if annotation == ATTR_ANNOTATION: annotation = EMPTY_ANNOTATION
         else: super().__setitem__(attrname, annotation)
 
-        # Parse annotation to .type
-        var.__class__.type.parse(var, annotation)
+        # Set .classvar
+        object.__setattr__(var, 'classvar', annotation.startswith(ClassVar._name))
 
         # Set options which was not defined earlier by option definition objects / Attr kwargs
         for option in (__options__):
@@ -223,18 +223,19 @@ class AttrTypeDescriptor:
             attributes, provided in constructor.
     """
 
-    __slots__ = '_code_', 'typeSlot', 'annotationSlot', 'classvarSlot'
+    __slots__ = '_cache_', 'typeSlot', 'annotationSlot'
 
-    def __init__(self, typeSlot: str, annotationSlot: str, classvarSlot: str):
+    def __init__(self, typeSlot: str, annotationSlot: str):
         self.typeSlot: str = typeSlot
         self.annotationSlot: str = annotationSlot
-        self.classvarSlot: str = classvarSlot
         # Compiled annotation expressions cache
-        self._code_: Dict[Attr, CodeType] = {}
+        self._cache_: Dict[Attr, Tuple[CodeType, dict]] = {}
 
-    def parse(self, attr: Attr, annotation: str = Null, *, strict: bool = False):
+    def parse(self, attr: Attr, annotation: Union[CodeType, str], env: dict):
         """ Parse annotation string and set generated typespec to attr's `.typeSlot` attribute
                 and evaluated annotation - to `.annotationSlot`
+
+            TODO: env argument, removed strict (now looking for attr in _cache_)
 
             'strict' - defines what to do in case of name resolution failure during annotation evaluation
                        True - raise NameError (used in postponed type evaluation)
@@ -257,23 +258,14 @@ class AttrTypeDescriptor:
 
         assign = partial(object.__setattr__, attr)
 
-        # Get annotation expression code from cache, if annotation string is not provided
-        if annotation is Null:
-            try:
-                code = self._code_[attr]
-            except KeyError:
-                raise TypeError("Annotation cache is missing - 'annotation' string needs to be provided")
+        # Compile annotation, if it is a string
+        if isinstance(annotation, str):
 
-        else:
             # Fast-forward empty annotations
             if annotation is EMPTY_ANNOTATION:
                 assign(self.annotationSlot, None)
                 assign(self.typeSlot, object)
-                assign(self.classvarSlot, False)
                 return
-
-            # Set .classvar
-            assign(self.classvarSlot, annotation.startswith(ClassVar._name))
 
             # Pre-compile annotation expression
             try:
@@ -281,10 +273,18 @@ class AttrTypeDescriptor:
             except SyntaxError as e:
                 raise SyntaxError(f"Attr '{attr.name}' - cannot evaluate annotation '{annotation}' - {e}")
 
+        # Just assign, if pre-compiled
+        else:
+            code = annotation
+
         # Parse expression to typespec
         globs = globals()
         # CONSIDER: ▼ do I need names from typing?
-        locs = {**vars(typing), **modules[attr.__module__].__dict__}
+        namespace = modules[env['__module__']].__dict__ if '__module__' in env else {}
+        locs = {**vars(typing), **env, **namespace}
+
+        log.spam(f"Resolving annotation '{annotation if annotation is not Null else '<Unknown>'}' "
+                 f"for '{attr.name}' attr in scope of '{namespace.get('__name__', '<Unknown>')}' module")
 
         try:
             typeval = eval(code, globs, locs)
@@ -306,7 +306,6 @@ class AttrTypeDescriptor:
                 spec = list(typeval.__args__)
             else:
                 spec = [typeval]
-
 
             i = 0
             while True:
@@ -347,18 +346,21 @@ class AttrTypeDescriptor:
 
         # Handle the case when annotation contains forward reference
         except NameError as e:
-            if strict:
+            if attr in self._cache_:
+                # This is 'runtime' type evaluation, name does not resolve
                 raise NameError(f"Attr '{attr.name}' - cannot resolve annotation - {e}")
             else:
-                self._code_[attr] = code  # cache bytecode
-                return  # postpone evaluation
+                # Cache bytecode and class namespace
+                self._cache_[attr] = (code, env)
+                # Postpone evaluation
+                return
         else:
             assign(self.typeSlot, spec if len(spec) > 1 else spec[0])
         finally:
-            if hasattr(attr, self.typeSlot):
-                print(f"{attr.name}.{self.typeSlot}: {getattr(attr, self.typeSlot)}")
-            else:
-                print(f"{attr.name}.{self.typeSlot} - NOT ASSIGNED")
+            try:
+                log.debug(f"{attr.name}.{self.typeSlot} = {getattr(attr, self.typeSlot)}")
+            except AttributeError:
+                log.debug(f"{attr.name}.{self.typeSlot} - NOT ASSIGNED")
 
     def __get__(self, instance: Attr, owner: Type[Attr]) -> Union[type, Tuple[type, ...], AttrTypeDescriptor]:
         """ Return typespec for given attr. If typespec is not yet evaluated,
@@ -370,7 +372,11 @@ class AttrTypeDescriptor:
         try:
             return getattr(instance, self.typeSlot)
         except AttributeError:
-            self.parse(instance, strict=True)
+            try:
+                code, env = self._cache_[instance]
+            except KeyError:
+                raise RuntimeError(f"Attr '{instance.name}' - annotation cache is missing")
+            self.parse(instance, code, env)
             return getattr(instance, self.typeSlot)
 
 
@@ -400,7 +406,7 @@ class Attr:
     # Params
     name: str
     default: Any
-    type = AttrTypeDescriptor(typeSlot='_typespec_', annotationSlot='_annotation_', classvarSlot='classvar')
+    type: Union[type, Tuple[type, ...]] = AttrTypeDescriptor('_typespec_', '_annotation_')
     classvar: bool
 
     # Service
@@ -584,6 +590,10 @@ class Classtools(type):  # CONSIDER: Classtools
 
         if metacls.enabled is False:
             return super().__new__(metacls, clsname, bases, clsdict)
+
+        # Parse annotations to attr.type
+        for name, attr in metacls.attrs.items():
+            Attr.type.parse(attr, clsdict['__annotations__'].get(name, EMPTY_ANNOTATION), clsdict)
 
         # Cleanup class __dict__
         for name, attr in metacls.attrs.items():
