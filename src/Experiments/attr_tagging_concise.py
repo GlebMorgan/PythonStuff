@@ -641,9 +641,6 @@ class Classtools(type):  # CONSIDER: Classtools
         if metacls.addSlots is True:
             metacls.injectSlots(clsdict)
 
-        # Configure attr descriptors based on options being set
-        metacls.setupDescriptors(clsdict)
-
         # Generate __init__() function, 'init()' is used to further initialize object
         if metacls.addInit is True:
             metacls.injectInit(clsdict)
@@ -654,6 +651,13 @@ class Classtools(type):  # CONSIDER: Classtools
         # Convert annotation spy to normal dict
         clsdict['__annotations__'] = dict(metacls.annotations)
 
+        # Create target class
+        cls = super().__new__(metacls, clsname, bases, clsdict)
+
+        # Configure attr descriptors based on options being set
+        metacls.setupDescriptors(cls)
+
+        # Clean up namespace of future class
         del metacls.enabled
         del metacls.sectionOptions
         del metacls.addSlots
@@ -688,8 +692,6 @@ class Classtools(type):  # CONSIDER: Classtools
         for name, attr in metacls.attrs.items():
             if attr.classvar is True:
                 continue
-            if attr.const is True:
-                slots.append(f'{name}_slot')
             else:
                 slots.append(name)
         clsdict['__slots__'] = tuple(slots)
@@ -739,8 +741,6 @@ class Classtools(type):  # CONSIDER: Classtools
             if attr.skip is True:
                 if attr.default is not Null:
                     lines.append(f'self.{name} = {defaultStr}{copyStr}')
-            elif attr.const:
-                lines.append(f"self.{name}_slot = {name}")
             else:
                 lines.append(f'self.{name} = {name}{copyStr}')
 
@@ -807,11 +807,10 @@ class Classtools(type):  # CONSIDER: Classtools
             clsdict['__getattr__'] = evalLazyAttrs
 
     @classmethod
-    def setupDescriptors(metacls, clsdict):
-        for attr in metacls.attrs.values():
+    def setupDescriptors(metacls, cls):
+        for name, attr in metacls.attrs.items():
             if attr.const is True:
-                clsdict[attr.name] = ConstDescriptor(attr.name)
-
+                setattr(cls, name, ConstDescriptor(name, getattr(cls, name)))
 
     @staticmethod
     def mergeTags(parents, currentTags):
@@ -848,22 +847,23 @@ class Classtools(type):  # CONSIDER: Classtools
 
 
 class ConstDescriptor:
-    __slots__ = 'name', 'slot'
+    __slots__ = 'slot', 'name'
 
-    def __init__(self, name):
-        self.name = f'{name}_slot'
+    def __init__(self, name, descriptor):
+        self.name = name
+        self.slot = descriptor
 
     def __get__(self, instance, owner):
-        # Access descriptor itself from class
         if instance is None: return self
-        return getattr(instance, self.name)
+        return self.slot.__get__(instance, owner)
 
     def __set__(self, instance, value):
-        if hasattr(instance, self.name):
-            raise AttributeError(f"Attr '{self.name.rstrip('_slot')}' is declared constant")
-            # CONSIDER: when using __slots__, this msg is not printed --► need to make unified?
+        try:
+            self.slot.__get__(instance, type(instance))
+        except AttributeError:
+            self.slot.__set__(instance, value)
         else:
-            setattr(instance, self.name, value)
+            raise AttributeError(f"Attr '{self.name}' is declared constant")
 
 
 class Section:
