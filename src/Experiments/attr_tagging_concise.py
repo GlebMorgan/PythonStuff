@@ -688,7 +688,7 @@ class Classtools(type):  # CONSIDER: Classtools
 
     @classmethod
     def injectSlots(metacls, clsdict):
-        slots = []
+        slots = [] if '__slots__' not in clsdict else list(clsdict['__slots__'])
         for name, attr in metacls.attrs.items():
             if attr.classvar is True:
                 continue
