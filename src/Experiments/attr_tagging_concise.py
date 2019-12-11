@@ -820,8 +820,7 @@ class Classtools(type):  # CONSIDER: Classtools
                 try: return __getattr_native__(self, name)
                 except AttributeError: pass
 
-            # Will definitely fail, but with standard error message
-            return getattr(super(self.__class__, self), name)
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{name}'")
 
         clsdict['__getattr__'] = evalLazyAttrs
 
