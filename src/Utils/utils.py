@@ -40,17 +40,26 @@ class Timer:
         self.start()
 
     def __exit__(self, errtype, value, traceback):
-        self.stop()
+        if errtype is None:
+            self.err()
+        else:
+            self.stop(time())
 
     def start(self):
         if not self.running:
             self.running = True
             self.tstart = time()
 
-    def stop(self):
+    def stop(self, tick):
         if self.running:
             self.running = False
-            print(f"[{self.name or 'Timer'}] duration: {(time() - self.tstart)*self.multiplier}")
+            print(f"[{self.name or 'Timer'}] duration: {(tick - self.tstart)*self.multiplier}")
+
+    def err(self):
+        if self.running:
+            self.running = False
+            print(f"[{self.name or 'Timer'}] execution failure)")
+
 
 class InternalNameShadingVerifier():
 
