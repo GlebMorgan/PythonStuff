@@ -119,29 +119,21 @@ class Formatters:
 
 
 class ColoredLogger(VerboseLogger):
-    """ Custom logger class for supplying some convenience features
-
-            .all       - dict with all currently existing loggers (maps name to logger)
-            .levels    - dict mapping all logger level names (including extra ones
-                             injected by verboselogs module) to their respective levels
-            .levelname - returns currently set logging level as string
-            .log()     - formats errors as 'ErrorClass: message'
-                         provides 'traceback' kwarg as an alias for 'exc_info'
-            .disable() - turns all (or all-but-current) loggers off
-                         if no args provided, works as CM to temporarily disable logging
-            TODO: update this
-    """
+    """ Custom logger class with colored output and some convenience features """
 
     consoleHandler: logging.StreamHandler
     fileHandler: logging.FileHandler
     qtHandler: QtHandler
 
     @property
-    def levelname(self):
-        """ Returns current logging level as string """
+    def levelname(self) -> str:
+        """ Get current logging level as string """
         return logging.getLevelName(self.level)
 
     def suppressed(self, level: str = None):
+        """ Context manager to temporarily suppress/disable current logger
+            Refer to Logger.suppressed() docstring for details
+        """
         return Logger.suppressed(self.name, level)
 
     def setFormatting(self, **handlers: logging.Handler):
@@ -154,8 +146,7 @@ class ColoredLogger(VerboseLogger):
             handler.setFormatter(formatter)
 
     def setConsoleHandler(self, formatter=Formatters.colored):
-        """ Add StreamHandler with given formatter set (default - verbose colored)
-        """
+        """ Add StreamHandler with given formatter set (default - verbose with colors) """
         if hasattr(self, 'consoleHandler'):
             self.handlers.remove(self.consoleHandler)
         self.consoleHandler = logging.StreamHandler()
@@ -166,8 +157,7 @@ class ColoredLogger(VerboseLogger):
         self.addHandler(self.consoleHandler)
 
     def setFileHandler(self, path: str, formatter=Formatters.basic):
-        """ Add FileHandler with given formatter set (default - verbose w/o coloring)
-        """
+        """ Add FileHandler with given formatter set (default - verbose w/o colors) """
         if hasattr(self, 'fileHandler'):
             self.handlers.remove(self.fileHandler)
         self.fileHandler = logging.FileHandler(path)
@@ -176,6 +166,7 @@ class ColoredLogger(VerboseLogger):
         self.addHandler(self.fileHandler)
 
     def setQtHandler(self, slot: Callable, formatter=Formatters.simpleQtColored):
+        """ Add QtHandler with given formatter set (default - simple with QT-specific colors) """
         if hasattr(self, 'qtHandler'):
             self.handlers.remove(self.qtHandler)
         try:
@@ -186,35 +177,25 @@ class ColoredLogger(VerboseLogger):
         self.addHandler(self.qtHandler)
 
     def _log(self, level, msg, *args, traceback=None, **kwargs):
-        """ Override. Formats errors in 'ErrorClass: message' format.
+        """ Overrides logging._log
+            Formats errors in 'ErrorClass: message' format.
             'traceback' kwarg is an alias for 'exc_info'
         """
-
         if isinstance(msg, Exception):
             err = msg
             if err.args and str(err.args[0]).strip():
                 msg = f'{msg.__class__.__name__}: {msg}'
             else:
                 msg = msg.__class__.__name__
-
         if traceback is True:
             kwargs['exc_info'] = True
-
         return super()._log(level, msg, *args, **kwargs)
 
 
 class Logger:
-    """ Factory generating loggers with pre-assigned handlers and formatters
+    """ Convenience class for acquiring loggers and logging meta-info """
 
-        name - Logger name. If not provided, is set to ROOT + record format is just
-                   colored message with no format fields set (simpleColorFormatter is used)
-        Handlers:
-            console - boolean enabling StreamHandler with colored output (colorFormatter is used)
-            file    - path providing log file path for FileHandler (basicFormatter is used)
-            qt      - PyQt callback to trigger when LogRecord is emitted (htmlColorFormatter is used)
-    """
-
-    # Mapping {logger level name: level number value}
+    # Mapping {logger level name: level number value} - includes names injected by 'verboselogs' module
     levels: Dict[str, int] = logging._nameToLevel
 
     # Mapping {logger name: logger-like object} - contains whatever it is in Manager.loggersDict
@@ -223,10 +204,18 @@ class Logger:
     # Mapping {logger name: logger object} - contains only loggers
     loggers: Dict[str, logging.Logger]
 
-    def __new__(cls, name: str = ROOT, console: bool = True, file: str = None, qt: Callable = None):
-        """ Create new ColoredLogger or return existing """
+    def __new__(cls, name: str = ROOT, console: bool = True,
+                file: str = None, qt: Callable = None) -> ColoredLogger:
+        """ Create new ColoredLogger with pre-assigned handlers and formatters or return existing one
+                name - Logger name. If not provided, is set to ROOT + record format is just
+                           a colored message with no format fields set (simpleColorFormatter is used)
+            Handlers:
+                console - boolean enabling StreamHandler with colored output (colorFormatter is used)
+                file    - path providing log file path for FileHandler (basicFormatter is used)
+                qt      - PyQt callback to trigger when LogRecord is emitted (htmlColorFormatter is used)
+        """
 
-        # ▼ Prevent duplicate initializing when Logger() with name provided already exists
+        # Prevent duplicate initializing when Logger() with name provided already exists
         if name in Logger.all:
             return logging.getLogger(name)
         else:
@@ -247,10 +236,19 @@ class Logger:
 
     @classmethod
     @contextmanager
-    def suppressed(cls, target: Union[str, Collection[str]] = 'all', level: str = None):
-        """ Disables all existing to-the-moment loggers inside its context
-                and enables back those which were enabled initially
-                TODO: update this
+    def suppressed(cls, target: Union[str, Collection[str], None] = 'all', level: str = None):
+        """ Context manager. Suppresses / disables all existing to-the-moment loggers
+                inside its context and returns them to previous state afterwards
+            Suppression means setting loggers level to the value provided by 'level' argument
+                target - string or collection of strings defining logger names to be processed
+                         • None - context manager does nothing (this may be used
+                             if suppression necessity is decided dynamically)
+                         • 'loggerName' - disables logger with specified name
+                         • '-<loggerName>' - disables all except specified
+                         • 'all' - disables all loggers that are found in .loggers
+                         • ['name1', 'name2', ...] - disables all specified
+                level - logging level to suppress loggers to
+                        None - loggers are disabled altogether
         """
 
         if target == 'all':
@@ -259,7 +257,7 @@ class Logger:
             intact = cls.loggers[target[1:]]
             loggers = tuple(logger for logger in cls.loggers.values() if logger is not intact)
         elif target is None:
-            # Return empty context manager, used if suppression is chosen dynamically
+            # Return empty context manager
             yield; return
         elif isinstance(target, Collection):
             loggers = tuple(cls.loggers[name] for name in target)
@@ -303,9 +301,6 @@ if __name__ == '__main__':
 
     from .utils import formatDict
     print(f"Logger.all: {formatDict(Logger.all)}")
-
-    print('Sample:')
-
 
     if "PYCHARM_HOSTED" not in os.environ:
         input('Type to exit...')
