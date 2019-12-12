@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from contextlib import contextmanager
-from typing import List, Callable
+from typing import Callable, Collection, Dict, Union
 
 import colorama
 from coloredlogs import ColoredFormatter, converter as AnsiToHtmlConverter
@@ -129,24 +129,20 @@ class ColoredLogger(VerboseLogger):
                          provides 'traceback' kwarg as an alias for 'exc_info'
             .disable() - turns all (or all-but-current) loggers off
                          if no args provided, works as CM to temporarily disable logging
+            TODO: update this
     """
-
-    """ Mapping {logger level name: respective level value} """
-    levels = logging._nameToLevel
 
     consoleHandler: logging.StreamHandler
     fileHandler: logging.FileHandler
     qtHandler: QtHandler
 
-    @classproperty
-    def all(cls):
-        """ Dict with all currently existing loggers (maps name to logger) """
-        return cls.manager.loggerDict
-
     @property
     def levelname(self):
         """ Returns current logging level as string """
         return logging.getLevelName(self.level)
+
+    def suppressed(self, level: str = None):
+        return Logger.suppressed(self.name, level)
 
     def setFormatting(self, **handlers: logging.Handler):
         """ Set custom logger formatters from given '<handler>=<formatter>' kwargs """
@@ -206,40 +202,8 @@ class ColoredLogger(VerboseLogger):
 
         return super()._log(level, msg, *args, **kwargs)
 
-    @classmethod
-    def disable(cls, option: str = None):
-        """ Disable specified loggers among currently instantiated
-            Options: 'all', 'others', <None>
-            If no option provided, returns a context manager
-                that disables all existing to-the-moment loggers inside its context
-        """
-        if option is None:
-            return cls._disableCM_()
-        elif option == 'all':
-            for logger in cls.all.values():
-                logger.disabled = True
-        elif option == 'others':
-            for logger in cls.all.values():
-                if logger is not cls:
-                    logger.disabled = True
 
-    @classmethod
-    @contextmanager
-    def _disableCM_(cls):
-        """ Disables all existing to-the-moment loggers inside its context
-                and enables back those which were enabled initially
-        """
-        saved_states: List[logging.Logger] = []
-        for logger in cls.all.values():
-            if logger.disabled is False:
-                saved_states.append(logger)
-                logger.disabled = True
-        yield
-        for logger in saved_states:
-            logger.disabled = False
-
-
-def Logger(name: str = ROOT, console: bool = True, file: str = None, qt: Callable = None):
+class Logger:
     """ Factory generating loggers with pre-assigned handlers and formatters
 
         name - Logger name. If not provided, is set to ROOT + record format is just
@@ -250,24 +214,73 @@ def Logger(name: str = ROOT, console: bool = True, file: str = None, qt: Callabl
             qt      - PyQt callback to trigger when LogRecord is emitted (htmlColorFormatter is used)
     """
 
-    # ▼ Prevent duplicate initializing when Logger() is called with the same name
-    if name in Logger.all:
-        return logging.getLogger(name)
-    else:
-        this: ColoredLogger = logging.getLogger(name)
+    # Mapping {logger level name: level number value}
+    levels: Dict[str, int] = logging._nameToLevel
 
-    if console: this.setConsoleHandler()
-    if file: this.setFileHandler(file)
-    if qt: this.setQtHandler(qt)
+    # Mapping {logger name: logger-like object} - contains whatever it is in Manager.loggersDict
+    all: Dict[str, logging.Logger] = logging.getLoggerClass().manager.loggerDict
 
-    return this
+    # Mapping {logger name: logger object} - contains only loggers
+    loggers: Dict[str, logging.Logger]
 
+    def __new__(cls, name: str = ROOT, console: bool = True, file: str = None, qt: Callable = None):
+        """ Create new ColoredLogger or return existing """
 
-# Assign properties that do not refer to
-# particular logger objects on Logger function itself
-# in order not to import unbound names from this module
-Logger.all = logging.getLogger().manager.loggerDict
-# CONSIDER .all contains not only loggers, but some nasty PlaceHolders, etc.
+        # ▼ Prevent duplicate initializing when Logger() with name provided already exists
+        if name in Logger.all:
+            return logging.getLogger(name)
+        else:
+            this: ColoredLogger = logging.getLogger(name)
+
+        if console: this.setConsoleHandler()
+        if file: this.setFileHandler(file)
+        if qt: this.setQtHandler(qt)
+
+        return this
+
+    @classproperty
+    def loggers(cls) -> Dict[str, logging.Logger]:
+        """ Dict with all currently existing loggers (maps name to logger)
+            All non-logger classes are excluded (like 'PlaceHolder' and 'Adapter')
+        """
+        return {name: logger for name, logger in cls.all.items() if isinstance(logger, logging.Logger)}
+
+    @classmethod
+    @contextmanager
+    def suppressed(cls, target: Union[str, Collection[str]] = 'all', level: str = None):
+        """ Disables all existing to-the-moment loggers inside its context
+                and enables back those which were enabled initially
+                TODO: update this
+        """
+
+        if target == 'all':
+            loggers = cls.loggers.values()
+        elif target == 'others':
+            loggers = tuple(logger for logger in cls.loggers.values() if logger is not cls)
+        elif target is None:
+            # Return empty context manager, used if suppression is chosen dynamically
+            yield; return
+        elif isinstance(target, Collection):
+            loggers = tuple(cls.loggers[name] for name in target)
+        else:
+            loggers = (cls.loggers[target],)
+
+        if level is None:
+            savedState = (logger.disabled for logger in loggers)
+            for logger in loggers:
+                logger.disabled = True
+            yield
+            for logger, value in zip(loggers, savedState):
+                logger.disabled = value
+
+        else:
+            savedState = (logger.level for logger in loggers)
+            for logger in loggers:
+                logger.setLevel(level.upper())
+            yield
+            for logger, value in zip(loggers, savedState):
+                logger.setLevel(value)
+
 
 logging.setLoggerClass(ColoredLogger)
 colorama.init() if sys.stdout.isatty() else colorama.deinit()
