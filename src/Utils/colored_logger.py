@@ -192,7 +192,7 @@ class ColoredLogger(VerboseLogger):
 
         if isinstance(msg, Exception):
             err = msg
-            if err.args and err.args[0].strip():
+            if err.args and str(err.args[0]).strip():
                 msg = f'{msg.__class__.__name__}: {msg}'
             else:
                 msg = msg.__class__.__name__
