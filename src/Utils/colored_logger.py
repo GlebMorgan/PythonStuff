@@ -255,8 +255,9 @@ class Logger:
 
         if target == 'all':
             loggers = cls.loggers.values()
-        elif target == 'others':
-            loggers = tuple(logger for logger in cls.loggers.values() if logger is not cls)
+        elif target.startswith('-'):
+            intact = cls.loggers[target[1:]]
+            loggers = tuple(logger for logger in cls.loggers.values() if logger is not intact)
         elif target is None:
             # Return empty context manager, used if suppression is chosen dynamically
             yield; return
