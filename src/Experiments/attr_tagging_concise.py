@@ -604,10 +604,6 @@ class Classtools(type):  # CONSIDER: Classtools
         if metacls.enabled is False:
             return super().__new__(metacls, clsname, bases, clsdict)
 
-        # Parse annotations to attr.type
-        for name, attr in metacls.attrs.items():
-            Attr.type.parse(attr, clsdict['__annotations__'].get(name, EMPTY_ANNOTATION), clsdict)
-
         # Cleanup class __dict__
         for name, attr in metacls.attrs.items():
             if attr.default is Null or (attr.classvar is False and (metacls.addSlots or not STORE_DEFAULTS)):
@@ -666,6 +662,11 @@ class Classtools(type):  # CONSIDER: Classtools
 
         # Create target class
         cls = super().__new__(metacls, clsname, bases, clsdict)
+
+        # Parse annotations to attr.type
+        clsdict.update({clsname: cls})
+        for name, attr in metacls.attrs.items():
+            Attr.type.parse(attr, annotation=clsdict['__annotations__'].get(name, EMPTY_ANNOTATION), env=clsdict)
 
         # Configure attr descriptors based on options being set
         metacls.setupDescriptors(cls)
