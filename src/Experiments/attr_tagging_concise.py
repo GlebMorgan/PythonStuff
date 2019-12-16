@@ -353,8 +353,12 @@ class AttrTypeDescriptor:
                     # TESTME: does ForwardRef._evaluate() would work properly here?
                     spec[i] = item._evaluate(globs, locs)
                 else:
-                    raise ValueError(f"Attr '{attr.name}' - "
-                                     f"annotation '{typeval}' is invalid type")
+                    if isinstance(typeval, str):
+                        raise ValueError(f"Attr '{attr.name}' - "
+                                         f"annotation string '{typeval}' itself contains a string")
+                    else:
+                        raise ValueError(f"Attr '{attr.name}' - "
+                                         f"annotation '{typeval}' is invalid type")
             spec = tuple(set(spec))
 
         # Handle the case when annotation contains forward reference
