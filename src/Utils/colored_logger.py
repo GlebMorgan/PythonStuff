@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 from contextlib import contextmanager
+from functools import partial
 from typing import Callable, Collection, Dict, Union
 
 import colorama
@@ -265,20 +266,19 @@ class Logger:
             loggers = (cls.loggers[target],)
 
         if level is None:
-            savedState = (logger.disabled for logger in loggers)
-            for logger in loggers:
-                logger.disabled = True
-            yield
-            for logger, value in zip(loggers, savedState):
-                logger.disabled = value
-
+            savedState = tuple(logger.disabled for logger in loggers)
+            targetState = True
+            actions = tuple(partial(setattr, logger, 'disabled') for logger in loggers)
         else:
-            savedState = (logger.level for logger in loggers)
-            for logger in loggers:
-                logger.setLevel(level.upper())
-            yield
-            for logger, value in zip(loggers, savedState):
-                logger.setLevel(value)
+            savedState = tuple(logger.level for logger in loggers)
+            targetState = level
+            actions = tuple(logger.setLevel for logger in loggers)
+
+        for action in actions:
+            action(targetState)
+        yield
+        for action, state in zip(actions, savedState):
+            action(state)
 
 
 logging.setLoggerClass(ColoredLogger)
