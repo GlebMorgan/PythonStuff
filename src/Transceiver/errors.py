@@ -16,9 +16,11 @@ class VerboseError:
 
 
 SerialError = alias(serial.serialutil.SerialException)
+SerialError.__name__ = 'SerialError'
 
 
 SerialWriteTimeoutError = alias(serial.serialutil.SerialTimeoutException)
+SerialWriteTimeoutError.__name__ = 'SerialWriteTimeoutError'
 SerialWriteTimeoutError.__doc__ = """ Error: failed to send data for 'Serial().write_timeout' seconds """
 
 
