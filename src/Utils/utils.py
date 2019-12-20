@@ -676,17 +676,22 @@ class classproperty:
 
 class AttrEnum(Enum):
     def __new__(cls, *args, **kwargs):
-        if not hasattr(cls, '__names__'):
-            raise ValueError("__names__ is not defined")
         obj = object.__new__(cls)
         obj._value_ = len(cls.__members__) + 1
         return obj
 
     def __init__(self, *args):
-        if len(args) > len(self.__names__):
-            raise TypeError(f"Too many arguments, expected {len(self.__names__)}")
-        for _parname, _par in zip_longest(self.__names__, args):
-            setattr(self, _parname, _par)
+        cls = self.__class__
+
+        if hasattr(cls, '__names__'):
+            if self._name_ in cls.__names__:
+                raise ValueError(f"Enum '{cls.__name__}' member name '{self._name_}' "
+                                 f"conflicts with parameter name")
+            if len(args) > len(self.__names__):
+                raise TypeError(f"Too many arguments, expected {len(self.__names__)}")
+
+            for _parname, _par in zip_longest(self.__names__, args):
+                setattr(self, _parname, _par)
 
 
 def capital(s:str):
