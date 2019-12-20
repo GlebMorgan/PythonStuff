@@ -914,6 +914,7 @@ class Section:
 
 
 class OptionSection(Section):
+    __slots__ = ()
     def __apply__(self, **kwargs):
         for name, value in kwargs.items():
             if name not in __options__:
@@ -923,6 +924,7 @@ class OptionSection(Section):
 
 
 class TagSection(Section):
+    __slots__ = ()
     def __apply__(self, *args):
         if len(args) != 1:
             raise TypeError(f"{self.__class__.__name__} requires single positional argument 'tag'")
