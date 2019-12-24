@@ -756,6 +756,15 @@ class SingletonType(type):
         return cls._instances_[cls]
 
 
+def store(**attrs):
+    """ Function decorator that adds provided attrs to function object """
+    def decorator(method):
+        for name, default in attrs.items():
+            setattr(method, name, default)
+        return method
+    return decorator
+
+
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
 
 
