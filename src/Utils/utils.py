@@ -675,23 +675,65 @@ class classproperty:
 
 
 class AttrEnum(Enum):
+    """
+    TODO: AttrEnum docstring
+    >>> class Sample(AttrEnum):
+    >>>     __names__ = 'attr1', 'attr2'
+    >>>     A = 'data_A', 42
+    >>>     B = 'data_B', 13
+    >>>     C = 'data_C', 77
+    >>> test = Sample.B
+    >>> test, test.index, test.value, test.attr1, test.attr2
+    (<Sample.B: 2>, 1, 2, 'data_B', 13)
+
+    >>> class ValueSample(AttrEnum):
+    >>>     __names__ = 'value', 'data'
+    >>>     A = 1, 'data_A'
+    >>>     B = 3, 'data_B'
+    >>>     C = 2, 'data_C'
+    >>> test = ValueSample.B
+    >>> test, test.index, test.value, test.data
+    (<ValueSample.B: 3>, 1, 3, 'data_B')
+
+    >>> class SampleNoAttrs(AttrEnum):
+    >>>     A = 2
+    >>>     B = 7
+    >>>     C = 9
+    >>> test = SampleNoAttrs.B
+    >>> test, test.index, test.value
+    (<SampleNoAttrs.B: 7>, 1, 7)
+
+    """
+
+    __names__ = ()
+
     def __new__(cls, *args, **kwargs):
         obj = object.__new__(cls)
-        obj._value_ = len(cls.__members__) + 1
+        fields: tuple = cls.__names__
+        index = len(cls.__members__)
+
+        # If __names__ are not provided, set .index and leave .value as is
+        if not fields:
+            obj.index = index
+            return obj
+
+        # Freak out if enum member attrs exceed number of fields
+        elif len(args) > len(fields):
+            raise TypeError(f"{cls.__name__} enum member has too many attrs - "
+                            f"expected {len(fields)}, got {len(args)}")
+
+        # Assign .value and .index with values from attrs, or defaults if not provided
+        attrs: dict = dict(zip_longest(fields, args))
+        obj._value_: int = attrs.pop('value', index + 1)
+        obj.index: int = attrs.pop('index', index)
+
+        for name, value in attrs.items():
+            setattr(obj, name, value)
+
         return obj
 
-    def __init__(self, *args):
-        cls = self.__class__
-
-        if hasattr(cls, '__names__'):
-            if self._name_ in cls.__names__:
-                raise ValueError(f"Enum '{cls.__name__}' member name '{self._name_}' "
-                                 f"conflicts with parameter name")
-            if len(args) > len(self.__names__):
-                raise TypeError(f"Too many arguments, expected {len(self.__names__)}")
-
-            for _parname, _par in zip_longest(self.__names__, args):
-                setattr(self, _parname, _par)
+    def __dir__(self):
+        return (*super().__dir__(), '__names__', 'index', *self.__names__)
 
 
 def capital(s:str):
