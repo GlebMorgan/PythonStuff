@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from enum import Enum
 from functools import wraps
 from itertools import chain as itertools_chain, zip_longest
-from os import linesep
+from os import linesep, system
 from typing import Union, Iterable, Type, Mapping
 from time import time
 
@@ -763,6 +763,10 @@ def store(**attrs):
             setattr(method, name, default)
         return method
     return decorator
+
+
+def clipboard(text):
+        system('echo | set /p nul=' + text.strip() + '| clip')
 
 
 # ———————————————————————————————————————————————————————————————————————————————————————————————————————————————————— #
