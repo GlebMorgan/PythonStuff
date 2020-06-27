@@ -233,7 +233,7 @@ class PelengTransceiver(SerialTransceiver, Transceiver):
         assert (len(header) == self.HEADER_LEN)
         assert (header[0] == self.STARTBYTE)
         # unpack header (fixed structure - 6 bytes)
-        fields = struct.unpack('< B B H H', header)
+        fields = struct.unpack('< B B H H', header)  # FIXME: bug in datalen unpacking - see coupling protocol notes
         datalen = (fields[2] & 0x0FFF) * 2  # extract size in bytes, not 16-bit words
         zerobyte = (fields[2] & 1 << 15) >> 15  # extract EVEN flag (b15 in LSB / b7 in MSB)
         log.debug(f"ZeroByte: {zerobyte == 1}")
