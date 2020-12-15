@@ -1,0 +1,65 @@
+[08:43:58.676 logging_tests:coloredFormatterTest Test] 
+[08:43:58.677 logging_tests:coloredFormatterTest Test] SPAM
+[08:43:58.677 logging_tests:coloredFormatterTest Test] DEBUG
+[08:43:58.677 logging_tests:coloredFormatterTest Test] VERBOSE
+[08:43:58.677 logging_tests:coloredFormatterTest Test] INFO
+[08:43:58.677 logging_tests:coloredFormatterTest Test] NOTICE
+[08:43:58.677 logging_tests:coloredFormatterTest Test] WARNING
+[08:43:58.677 logging_tests:coloredFormatterTest Test] SUCCESS
+[08:43:58.678 logging_tests:coloredFormatterTest Test] ERROR
+[08:43:58.678 logging_tests:coloredFormatterTest Test] CRITICAL
+[08:43:58.678 logging_tests:coloredFormatterTest Test] test
+Traceback (most recent call last):
+  File "D:/GLEB/Python/PyUtils/src/Experiments/logging_tests.py", line 167, in coloredFormatterTest
+    try: raise RuntimeError('test')
+RuntimeError: test
+[08:44:01.165 logging_tests:log Test] Button clicked with SPAM
+[08:44:01.855 logging_tests:log Test] Button clicked with DEBUG
+[08:44:02.031 logging_tests:log Test] Button clicked with VERBOSE
+[08:44:02.175 logging_tests:log Test] Button clicked with INFO
+[08:44:02.535 logging_tests:log Test] Button clicked with NOTICE
+[08:44:02.712 logging_tests:log Test] Button clicked with WARNING
+[08:44:03.410 logging_tests:log Test] Button clicked with SUCCESS
+[08:44:04.417 logging_tests:log Test] Button clicked with ERROR
+[08:44:04.781 logging_tests:log Test] Button clicked with CRITICAL
+[08:44:41.659 logging_tests:coloredFormatterTest Test] 
+[08:44:41.659 logging_tests:coloredFormatterTest Test] SPAM
+[08:44:41.660 logging_tests:coloredFormatterTest Test] DEBUG
+[08:44:41.660 logging_tests:coloredFormatterTest Test] VERBOSE
+[08:44:41.660 logging_tests:coloredFormatterTest Test] INFO
+[08:44:41.660 logging_tests:coloredFormatterTest Test] NOTICE
+[08:44:41.660 logging_tests:coloredFormatterTest Test] WARNING
+[08:44:41.660 logging_tests:coloredFormatterTest Test] SUCCESS
+[08:44:41.660 logging_tests:coloredFormatterTest Test] ERROR
+[08:44:41.660 logging_tests:coloredFormatterTest Test] CRITICAL
+[08:44:41.661 logging_tests:coloredFormatterTest Test] DEBUG_EXCEPTION
+Traceback (most recent call last):
+  File "D:/GLEB/Python/PyUtils/src/Experiments/logging_tests.py", line 167, in coloredFormatterTest
+    try: raise RuntimeError('DEBUG_EXCEPTION')
+RuntimeError: DEBUG_EXCEPTION
+[08:44:43.461 logging_tests:log Test] Button clicked with SPAM
+[08:44:43.637 logging_tests:log Test] Button clicked with DEBUG
+[08:44:43.798 logging_tests:log Test] Button clicked with VERBOSE
+[08:44:43.957 logging_tests:log Test] Button clicked with INFO
+[08:44:44.101 logging_tests:log Test] Button clicked with NOTICE
+[08:44:44.277 logging_tests:log Test] Button clicked with WARNING
+[08:44:44.424 logging_tests:log Test] Button clicked with SUCCESS
+[08:44:44.583 logging_tests:log Test] Button clicked with ERROR
+[08:44:44.743 logging_tests:log Test] Button clicked with CRITICAL
+[08:44:44.920 logging_tests:log Test] Button clicked with EXCEPTION
+NoneType: None
+[08:45:18.598 logging_tests:coloredFormatterTest Test] 
+[08:45:18.599 logging_tests:coloredFormatterTest Test] SPAM
+[08:45:18.600 logging_tests:coloredFormatterTest Test] DEBUG
+[08:45:18.600 logging_tests:coloredFormatterTest Test] VERBOSE
+[08:45:18.600 logging_tests:coloredFormatterTest Test] INFO
+[08:45:18.601 logging_tests:coloredFormatterTest Test] NOTICE
+[08:45:18.601 logging_tests:coloredFormatterTest Test] WARNING
+[08:45:18.602 logging_tests:coloredFormatterTest Test] SUCCESS
+[08:45:18.602 logging_tests:coloredFormatterTest Test] ERROR
+[08:45:18.603 logging_tests:coloredFormatterTest Test] CRITICAL
+[08:45:18.603 logging_tests:coloredFormatterTest Test] DEBUG_EXCEPTION
+Traceback (most recent call last):
+  File "D:\GLEB\Python\PyUtils\src\Experiments\logging_tests.py", line 167, in coloredFormatterTest
+    try: raise RuntimeError('DEBUG_EXCEPTION')
+RuntimeError: DEBUG_EXCEPTION

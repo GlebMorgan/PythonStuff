@@ -54,7 +54,6 @@ def combine(*values):
 
 def split(): NotImplemented
 
-
 def extract(val, frombit=None, tobit=0):
     # TODO: define range in a symbol mask way
     """
